@@ -21,13 +21,24 @@ git clone https://xgitlab.cels.anl.gov/codes/codes.git
 ```
 Latest verfied commit: 2f6fc4ac652b1ef53d8b0df68b1a98ed9bbe7fbf
 
-* Download and build Charm++ with bgampi target:
+* Trace format choice (pick one): 
+
+1) Download and build Charm++ with bgampi target:
 ```
 git clone http://charm.cs.uiuc.edu/gerrit/charm
 ```
 Follow instructions in the [Charm++ manual](http://charm.cs.illinois.edu/manuals/html/charm++/A.html). Replace the "charm++" target with bgampi.
 
-* Set the appropriate paths CHARMPATH, ROSS, BASE_DIR/CODES in tracer/Makefile.common and then:
+2) Down and build scoreP for OTF2 support:
+
+Follow instruction at http://www.vi-hps.org/projects/score-p/
+
+
+* Set the appropriate paths ROSS, BASE_DIR/CODES in tracer/Makefile.common. If 
+using BigSim format, uncomment SELECT_TRACE = -DTRACER_BIGSIM_TRACES=1,
+otherwise SELECT_TRACE = -DTRACER_OTF_TRACES=1 should be left uncomment (one of
+two). Either set CHARMPATH or ensure that otf2-config (which is inside the bin
+directory of scoreP install) is in your path. Then,
 ```
 cd tracer
 make
