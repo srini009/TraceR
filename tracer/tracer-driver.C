@@ -1563,6 +1563,8 @@ static tw_stime exec_task(
         } else {
           b->c24 = 1;
           taskEntry->msgId.seq = ns->my_pe->sendSeq[node]++;
+          /*RDMA_Write: This should probably be untouched. If non-blocking, sender adds request
+           *to pendingReqs, and noted that the wait has not yet been posted.*/ 
           if(t->isNonBlocking) {
             if(ns->my_pe->pendingReqs.find(t->req_id) == 
                ns->my_pe->pendingReqs.end()) {
@@ -1570,7 +1572,16 @@ static tw_stime exec_task(
               ns->my_pe->pendingReqs[t->req_id] = -1;
             }
           }
-          MsgKey key(taskEntry->node, taskEntry->msgId.id, taskEntry->msgId.comm, 
+          /*RDMA_Write: Sender does NOT transfer data right away. 
+           *Nonblocking or not, sender just sends "RNZ_START" message here in an Eager manner. 
+           *It is assumed that the sender inside an MPI_Isend has just enough time to send the control
+           *message and return. It does not sit around waiting for receiver to reply. */
+          m->model_net_calls++;
+          send_msg(ns, MsgEntry_getSize(taskEntry),
+              task_id.iter, &taskEntry->msgId, ns->my_pe->sendSeq[node]++,
+              pe_to_lpid(node, ns->my_job), sendOffset+copyTime+nic_delay+delay, 
+              RNZ_START, lp);
+          /*MsgKey key(taskEntry->node, taskEntry->msgId.id, taskEntry->msgId.comm, 
             taskEntry->msgId.seq);
           KeyType::iterator it = ns->my_pe->pendingRMsgs.find(key);
           if(it == ns->my_pe->pendingRMsgs.end() || (it->second.front() != -1)) {
@@ -1584,7 +1595,7 @@ static tw_stime exec_task(
             if(it->second.size() == 0) {
               ns->my_pe->pendingRMsgs.erase(it);
             }
-          }
+          }*/
 #if DEBUG_PRINT
           printf("%d: Send %d %d %d %d, nonblock %d/%d, wait %d, do %d, task %d\n", ns->my_pe_num, 
            taskEntry->node, taskEntry->msgId.id, taskEntry->msgId.comm, 
