@@ -1529,6 +1529,7 @@ static tw_stime exec_task(
     tw_stime delay = soft_latency; //intra node latency
     double sendFinishTime = 0;
 
+    /* Triggered with MPI_Send or MPI_Isend*/
     if(t->event_id == TRACER_SEND_EVT) {
       b->c23 = 1;
       MsgEntry *taskEntry = &t->myEntry;
@@ -1555,6 +1556,7 @@ static tw_stime exec_task(
 
         if(isCopying) {
           m->model_net_calls++;
+          /*Eager - blocking or non-blocking - send out the data immediately. Trigger a RECV_MSG event on receiver side*/
           send_msg(ns, MsgEntry_getSize(taskEntry),
               task_id.iter, &taskEntry->msgId, ns->my_pe->sendSeq[node]++,
               pe_to_lpid(node, ns->my_job), sendOffset+copyTime+nic_delay+delay, 
@@ -1563,31 +1565,37 @@ static tw_stime exec_task(
         } else {
           b->c24 = 1;
           taskEntry->msgId.seq = ns->my_pe->sendSeq[node]++;
-          /*RDMA_Write: This should probably be untouched. If non-blocking, sender adds request
-           *to pendingReqs, and noted that the wait has not yet been posted.*/ 
+
+          /*RDMA_Write: Sender does NOT transfer data right away. 
+           *Non-blocking or not, sender just sends a 1-byte "RNZ_START" message here in an Eager manner. 
+           *It is assumed that the sender inside an MPI_Isend has just enough time to send the control
+           *message and return. It does not sit around waiting for receiver to reply. 
+           *More importantly, no data is transferred inside MPI_Isend*/
+          m->model_net_calls++;
+          send_msg(ns, 1,
+              task_id.iter, &taskEntry->msgId, ns->my_pe->sendSeq[node]++,
+              pe_to_lpid(node, ns->my_job), sendOffset+copyTime+nic_delay+delay, 
+              RNZ_START, lp);
+         
+          /*If non-blocking, then add request to pending requests.*/ 
           if(t->isNonBlocking) {
             if(ns->my_pe->pendingReqs.find(t->req_id) == 
                ns->my_pe->pendingReqs.end()) {
               b->c25 = 1;
+              /*RDMA_Write: -1 indicates that the wait has not been enabled yet */
               ns->my_pe->pendingReqs[t->req_id] = -1;
             }
           }
-          /*RDMA_Write: Sender does NOT transfer data right away. 
-           *Nonblocking or not, sender just sends "RNZ_START" message here in an Eager manner. 
-           *It is assumed that the sender inside an MPI_Isend has just enough time to send the control
-           *message and return. It does not sit around waiting for receiver to reply. */
-          m->model_net_calls++;
-          send_msg(ns, MsgEntry_getSize(taskEntry),
-              task_id.iter, &taskEntry->msgId, ns->my_pe->sendSeq[node]++,
-              pe_to_lpid(node, ns->my_job), sendOffset+copyTime+nic_delay+delay, 
-              RNZ_START, lp);
-          /*MsgKey key(taskEntry->node, taskEntry->msgId.id, taskEntry->msgId.comm, 
+
+          /*Non-blocking or not, add the control messages to list of pendingRMsgs
+           *There is no chance that pendingRMsgs are already received (*/
+          MsgKey key(taskEntry->node, taskEntry->msgId.id, taskEntry->msgId.comm, 
             taskEntry->msgId.seq);
           KeyType::iterator it = ns->my_pe->pendingRMsgs.find(key);
           if(it == ns->my_pe->pendingRMsgs.end() || (it->second.front() != -1)) {
             b->c26 = 1;
             ns->my_pe->pendingRMsgs[key].push_back(task_id.taskid);
-          } else {
+          } /*else {
             b->c27 = 1;
             m->model_net_calls++;
             delegate_send_msg(ns, lp, m, b, t, task_id.taskid, sendOffset+delay);
