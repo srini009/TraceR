@@ -1300,24 +1300,22 @@ static tw_stime exec_task(
     }
 
     //else continue
-    bool needPost = false, returnAtEnd = false;
+    //
+    bool returnAtEnd = false;
     int64_t seq;
+    /*RDMA_Write: TRACER_RECV_POST_EVT is exclusively for posting MPI_Irecv. Let this be.*/
     if(t->event_id == TRACER_RECV_POST_EVT) {
       seq = ns->my_pe->recvSeq[t->myEntry.node];
       ns->my_pe->pendingRReqs[t->req_id] = seq;
       ns->my_pe->recvSeq[t->myEntry.node]++;
-#if DEBUG_PRINT
-      if(ns->my_pe_num ==  1222 || ns->my_pe_num == 1217) {
-        printf("%d Post Irecv: %d - %d %d %d %lld \n", ns->my_pe_num, 
-            t->req_id, t->myEntry.node, t->myEntry.msgId.id,
-            t->myEntry.msgId.comm, ns->my_pe->recvSeq[t->myEntry.node]-1);
-      }
-#endif
     }
-    if((t->event_id == TRACER_RECV_EVT || t->event_id == TRACER_RECV_COMP_EVT) 
+
+    if((t->event_id == TRACER_RECV_EVT/*MPI_Recv*/ || t->event_id == TRACER_RECV_COMP_EVT /*MPI_Wait for MPI_Irecv*/) 
        && !PE_noMsgDep(ns->my_pe, task_id.iter, task_id.taskid)) {
       b->c7 = 1;
       seq = ns->my_pe->recvSeq[t->myEntry.node];
+
+      /*Assert that the receive has indeed been posted for the MPI_Wait, and remove it from list of pending receive requests. Let this be.*/
       if(t->event_id == TRACER_RECV_COMP_EVT) {
         std::map<int, int64_t>::iterator it = ns->my_pe->pendingRReqs.find(t->req_id);
         assert(it != ns->my_pe->pendingRReqs.end());
@@ -1327,35 +1325,21 @@ static tw_stime exec_task(
       }
       MsgKey key(t->myEntry.node, t->myEntry.msgId.id, t->myEntry.msgId.comm, seq);
       if(t->event_id == TRACER_RECV_EVT) {
-        needPost = true;
         ns->my_pe->recvSeq[t->myEntry.node]++;
       }
+
       KeyType::iterator it = ns->my_pe->pendingMsgs.find(key);
       if(it == ns->my_pe->pendingMsgs.end()) {
         assert(PE_is_busy(ns->my_pe) == false);
         ns->my_pe->pendingMsgs[key].push_back(task_id.taskid);
-#if DEBUG_PRINT
-        if(1 || ns->my_pe_num == 1024 || ns->my_pe_num == 11788) {
-        printf("%d PUSH recv: %d - %d %d %d %lld %lld %d\n", ns->my_pe_num, 
-            task_id.taskid, t->myEntry.node, t->myEntry.msgId.id,
-            t->myEntry.msgId.comm, seq, ns->my_pe->recvSeq[t->myEntry.node]-1, t->event_id == TRACER_RECV_EVT);
-        }
-#endif
         b->c21 = 1;
-        if(!needPost) {
+        if(!TRACER_RECV_EVT) {
           return 0;
         } else {
           returnAtEnd = true;
         }
       } else {
         b->c22 = 1;
-#if DEBUG_PRINT
-        if(ns->my_pe_num ==  1222 || ns->my_pe_num == 1217) {
-        printf("%d Recv matched: %d - %d %d %d %lld, %lld %d\n", ns->my_pe_num, 
-            task_id.taskid, t->myEntry.node, t->myEntry.msgId.id,
-            t->myEntry.msgId.comm, seq, ns->my_pe->recvSeq[t->myEntry.node]-1, t->event_id == TRACER_RECV_EVT);
-        }
-#endif
         assert(it->second.front() == -1);
         ns->my_pe->pendingMsgs[key].pop_front();
         if(it->second.size() == 0) {
@@ -1363,17 +1347,16 @@ static tw_stime exec_task(
         }
       }
     }
+   
+    /*Send RECV_POST ONLY if the RNZ_START message was received
+     *This is valid in both MPI_Recv as well as MPI_Irecv modes */
     if(t->myEntry.node != ns->my_pe_num && 
        t->myEntry.msgId.size > eager_limit &&
-       (t->event_id == TRACER_RECV_POST_EVT || needPost)) {
+       (t->event_id == TRACER_RECV_POST_EVT || TRACER_RECV_EVT) && received_rendezvous_start(ns->my_pe)) {
       m->model_net_calls++;
       send_msg(ns, 16, ns->my_pe->currIter, &t->myEntry.msgId, seq,  
         pe_to_lpid(t->myEntry.node, ns->my_job), nic_delay, RECV_POST, lp);
-#if DEBUG_PRINT
-      printf("%d: Recv post %d %d %d %d\n", ns->my_pe_num, 
-          t->myEntry.node, t->myEntry.msgId.id, t->myEntry.msgId.comm, 
-          seq);
-#endif
+      
       recvFinishTime += nic_delay;
     }
     if(returnAtEnd) return 0;
@@ -1381,11 +1364,7 @@ static tw_stime exec_task(
 
     //Executing the task, set the pe as busy
     PE_set_busy(ns->my_pe, true);
-#if DEBUG_PRINT
-    if(1 || ns->my_pe_num == 1024 || ns->my_pe_num == 11788) {
-      printf("%d Set busy true %d\n", ns->my_pe_num, task_id.taskid);
-    }
-#endif
+
     //Mark the execution time of the task
     tw_stime time = PE_getTaskExecTime(ns->my_pe, task_id.taskid);
     ns->my_pe->taskExecuted[task_id.iter][task_id.taskid] = true;
@@ -1563,16 +1542,17 @@ static tw_stime exec_task(
               RECV_MSG, lp);
           sendFinishTime = sendOffset+copyTime;
         } else {
+          /* Rendezvous */
           b->c24 = 1;
           taskEntry->msgId.seq = ns->my_pe->sendSeq[node]++;
 
           /*RDMA_Write: Sender does NOT transfer data right away. 
-           *Non-blocking or not, sender just sends a 1-byte "RNZ_START" message here in an Eager manner. 
+           *Non-blocking or not, sender just sends a 16-byte "RNZ_START" message here in an Eager manner. 
            *It is assumed that the sender inside an MPI_Isend has just enough time to send the control
            *message and return. It does not sit around waiting for receiver to reply. 
            *More importantly, no data is transferred inside MPI_Isend*/
           m->model_net_calls++;
-          send_msg(ns, 1,
+          send_msg(ns, 16,
               task_id.iter, &taskEntry->msgId, ns->my_pe->sendSeq[node]++,
               pe_to_lpid(node, ns->my_job), sendOffset+copyTime+nic_delay+delay, 
               RNZ_START, lp);
