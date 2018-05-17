@@ -1301,7 +1301,7 @@ static tw_stime exec_task(
 
     //else continue
     //
-    bool returnAtEnd = false;
+    bool regular_receive_and_not_received_message = false;
     int64_t seq;
     /*RDMA_Write: TRACER_RECV_POST_EVT is exclusively for posting MPI_Irecv. Let this be.*/
     if(t->event_id == TRACER_RECV_POST_EVT) {
@@ -1315,7 +1315,8 @@ static tw_stime exec_task(
       b->c7 = 1;
       seq = ns->my_pe->recvSeq[t->myEntry.node];
 
-      /*Assert that the receive has indeed been posted for the MPI_Wait, and remove it from list of pending receive requests. Let this be.*/
+      /*Assert that the receive has indeed been posted for the MPI_Wait, and remove it from list of pending receive requests. Let this be.
+       *TODO: Handle case where MPI_Wait responds to RNZ_START */
       if(t->event_id == TRACER_RECV_COMP_EVT) {
         std::map<int, int64_t>::iterator it = ns->my_pe->pendingRReqs.find(t->req_id);
         assert(it != ns->my_pe->pendingRReqs.end());
@@ -1329,16 +1330,17 @@ static tw_stime exec_task(
       }
 
       KeyType::iterator it = ns->my_pe->pendingMsgs.find(key);
+      /*Message is not available. Expect to receive it.*/
       if(it == ns->my_pe->pendingMsgs.end()) {
         assert(PE_is_busy(ns->my_pe) == false);
         ns->my_pe->pendingMsgs[key].push_back(task_id.taskid);
         b->c21 = 1;
-        if(!TRACER_RECV_EVT) {
+        if(!TRACER_RECV_EVT) { /*If MPI_Wait, then wait*/
           return 0;
         } else {
-          returnAtEnd = true;
+          regular_receive_and_not_received_message = true;
         }
-      } else {
+      } else { /*Message is available. Take it!*/
         b->c22 = 1;
         assert(it->second.front() == -1);
         ns->my_pe->pendingMsgs[key].pop_front();
@@ -1359,7 +1361,7 @@ static tw_stime exec_task(
       
       recvFinishTime += nic_delay;
     }
-    if(returnAtEnd) return 0;
+    if(regular_receive_and_not_received_message) return 0; /*Wait*/
 #endif
 
     //Executing the task, set the pe as busy
