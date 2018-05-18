@@ -1302,28 +1302,81 @@ static tw_stime exec_task(
     //else continue
     //
     bool regular_receive_and_not_received_message = false;
+    bool is_message_rendezvous = false;
+
     int64_t seq;
-    /*RDMA_Write: TRACER_RECV_POST_EVT is exclusively for posting MPI_Irecv. Let this be.*/
+
+    /* Check if message is rendezvous or not*/
+    if(t->myEntry.node != ns->my_pe_num && t->myEntry.msgId.size > eager_limit) 
+      is_message_rendezvous = true;
+
+    /* MPI_Irecv. */
     if(t->event_id == TRACER_RECV_POST_EVT) {
       seq = ns->my_pe->recvSeq[t->myEntry.node];
       ns->my_pe->pendingRReqs[t->req_id] = seq;
       ns->my_pe->recvSeq[t->myEntry.node]++;
+
+      if(is_message_rendezvous && need_to_reply_to_rendezvous_start(ns->my_pe)) {
+        m->model_net_calls++;
+        send_msg(ns, 16, ns->my_pe->currIter, &t->myEntry.msgId, seq,  
+        pe_to_lpid(t->myEntry.node, ns->my_job), nic_delay, RECV_POST, lp);
+      
+        recvFinishTime += nic_delay;
+
+        need_to_reply_to_rendezvous_start(ns->my_pe) = false;
+      }
     }
 
-    if((t->event_id == TRACER_RECV_EVT/*MPI_Recv*/ || t->event_id == TRACER_RECV_COMP_EVT /*MPI_Wait for MPI_Irecv*/) 
-       && !PE_noMsgDep(ns->my_pe, task_id.iter, task_id.taskid)) {
+    /* MPI_Recv */
+    if (t->event_id == TRACER_RECV_EVT && !PE_noMsgDep(ns->my_pe, task_id.iter, task_id.taskid)) {
+      b->c7 = 1;
+      seq = ns->my_pe->recvSeq[t->myEntry.node];
+
+      MsgKey key(t->myEntry.node, t->myEntry.msgId.id, t->myEntry.msgId.comm, seq);
+      ns->my_pe->recvSeq[t->myEntry.node]++;
+
+      KeyType::iterator it = ns->my_pe->pendingMsgs.find(key);
+      /*Message is not available. Expect to receive it.*/
+
+      if(it == ns->my_pe->pendingMsgs.end()) {
+        assert(PE_is_busy(ns->my_pe) == false);
+        ns->my_pe->pendingMsgs[key].push_back(task_id.taskid);
+        b->c21 = 1;
+        regular_receive_and_not_received_message = true;
+      } else { /*Message is available. Take it!*/
+        b->c22 = 1;
+        assert(it->second.front() == -1);
+        ns->my_pe->pendingMsgs[key].pop_front();
+        if(it->second.size() == 0) {
+          ns->my_pe->pendingMsgs.erase(it);
+        }
+      }
+      
+      if(is_message_rendezvous && regular_receive_and_not_received_message && need_to_reply_to_rendezvous_start(ns->my_pe)) {
+        m->model_net_calls++;
+        send_msg(ns, 16, ns->my_pe->currIter, &t->myEntry.msgId, seq,  
+        pe_to_lpid(t->myEntry.node, ns->my_job), nic_delay, RECV_POST, lp);
+      
+        recvFinishTime += nic_delay;
+
+        need_to_reply_to_rendezvous_start(ns->my_pe) = false;
+      }
+    }
+
+    /* MPI_Wait for MPI_Irecv */
+    if(t->event_id == TRACER_RECV_COMP_EVT 
+       && !PE_noMsgDep(ns->my_pe, task_id.iter, task_id.taskid) {
       b->c7 = 1;
       seq = ns->my_pe->recvSeq[t->myEntry.node];
 
       /*Assert that the receive has indeed been posted for the MPI_Wait, and remove it from list of pending receive requests. Let this be.
        *TODO: Handle case where MPI_Wait responds to RNZ_START */
-      if(t->event_id == TRACER_RECV_COMP_EVT) {
-        std::map<int, int64_t>::iterator it = ns->my_pe->pendingRReqs.find(t->req_id);
-        assert(it != ns->my_pe->pendingRReqs.end());
-        seq = it->second;
-        t->myEntry.msgId.seq = seq;
-        ns->my_pe->pendingRReqs.erase(it);
-      }
+      std::map<int, int64_t>::iterator it = ns->my_pe->pendingRReqs.find(t->req_id);
+      assert(it != ns->my_pe->pendingRReqs.end());
+      seq = it->second;
+      t->myEntry.msgId.seq = seq;
+      ns->my_pe->pendingRReqs.erase(it);
+      
       MsgKey key(t->myEntry.node, t->myEntry.msgId.id, t->myEntry.msgId.comm, seq);
       if(t->event_id == TRACER_RECV_EVT) {
         ns->my_pe->recvSeq[t->myEntry.node]++;
@@ -1335,11 +1388,7 @@ static tw_stime exec_task(
         assert(PE_is_busy(ns->my_pe) == false);
         ns->my_pe->pendingMsgs[key].push_back(task_id.taskid);
         b->c21 = 1;
-        if(!TRACER_RECV_EVT) { /*If MPI_Wait, then wait*/
-          return 0;
-        } else {
-          regular_receive_and_not_received_message = true;
-        }
+        return 0;
       } else { /*Message is available. Take it!*/
         b->c22 = 1;
         assert(it->second.front() == -1);
@@ -1352,15 +1401,14 @@ static tw_stime exec_task(
    
     /*Send RECV_POST ONLY if the RNZ_START message was received
      *This is valid in both MPI_Recv as well as MPI_Irecv modes */
-    if(t->myEntry.node != ns->my_pe_num && 
-       t->myEntry.msgId.size > eager_limit &&
-       (t->event_id == TRACER_RECV_POST_EVT || TRACER_RECV_EVT) && received_rendezvous_start(ns->my_pe)) {
+    if(is_message_rendezvous && (t->event_id == TRACER_RECV_EVT) && received_rendezvous_start(ns->my_pe)) {
       m->model_net_calls++;
       send_msg(ns, 16, ns->my_pe->currIter, &t->myEntry.msgId, seq,  
         pe_to_lpid(t->myEntry.node, ns->my_job), nic_delay, RECV_POST, lp);
       
       recvFinishTime += nic_delay;
     }
+
     if(regular_receive_and_not_received_message) return 0; /*Wait*/
 #endif
 
