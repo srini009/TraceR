@@ -1351,6 +1351,7 @@ static tw_stime exec_task(
         recvFinishTime += nic_delay;
 
         need_to_reply_to_rendezvous_start(ns->my_pe) = false;
+        received_rendezvous_start(ns->my_pe) = true;
       }
     }
 
@@ -1387,6 +1388,7 @@ static tw_stime exec_task(
         recvFinishTime += nic_delay;
 
         need_to_reply_to_rendezvous_start(ns->my_pe) = false;
+        received_rendezvous_start(ns->my_pe) = true;
       }
     }
 
@@ -1404,10 +1406,23 @@ static tw_stime exec_task(
       t->myEntry.msgId.seq = seq;
       ns->my_pe->pendingRReqs.erase(it);
       
-      MsgKey key(t->myEntry.node, t->myEntry.msgId.id, t->myEntry.msgId.comm, seq);
-      if(t->event_id == TRACER_RECV_EVT) {
-        ns->my_pe->recvSeq[t->myEntry.node]++;
+      /*Send RECV_POST ONLY if the RNZ_START message was received
+     *  This is valid in both MPI_Recv as well as MPI_Irecv modes */
+      if(is_message_rendezvous && need_to_reply_to_rendezvous_start(ns->my_pe)) {
+        m->model_net_calls++;
+        send_msg(ns, 16, ns->my_pe->currIter, &t->myEntry.msgId, seq,  
+          pe_to_lpid(t->myEntry.node, ns->my_job), nic_delay, RECV_POST, lp);
+      
+        recvFinishTime += nic_delay;
+        need_to_reply_to_rendezvous_start(ns->my_pe) = false;
+        received_rendezvous_start(ns->my_pe) = true;
       }
+    
+      if(!received_rendezvous_start(ns->my_pe)) {
+        return 0; // Wait
+      }
+
+      MsgKey key(t->myEntry.node, t->myEntry.msgId.id, t->myEntry.msgId.comm, seq);
 
       KeyType::iterator it = ns->my_pe->pendingMsgs.find(key);
       /*Message is not available. Expect to receive it.*/
@@ -1426,16 +1441,6 @@ static tw_stime exec_task(
       }
     }
    
-    /*Send RECV_POST ONLY if the RNZ_START message was received
-     *This is valid in both MPI_Recv as well as MPI_Irecv modes */
-    if(is_message_rendezvous && (t->event_id == TRACER_RECV_EVT) && received_rendezvous_start(ns->my_pe)) {
-      m->model_net_calls++;
-      send_msg(ns, 16, ns->my_pe->currIter, &t->myEntry.msgId, seq,  
-        pe_to_lpid(t->myEntry.node, ns->my_job), nic_delay, RECV_POST, lp);
-      
-      recvFinishTime += nic_delay;
-    }
-
     if(regular_receive_and_not_received_message) return 0; /*Wait*/
 #endif
 
