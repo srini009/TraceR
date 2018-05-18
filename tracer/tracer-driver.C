@@ -538,6 +538,9 @@ static void proc_event(
     case RECV_POST:
       handle_recv_post_event(ns, b, m, lp);
       break;
+    case RNZ_START:
+      handle_rnz_start_event(ns, b, m, lp);
+      break;
     case COLL_BCAST:
       perform_bcast(ns, -1, lp, m, b, 1);
       break;
@@ -1181,10 +1184,15 @@ static void handle_recv_post_event(
 {
   MsgKey key(m->msgId.pe, m->msgId.id, m->msgId.comm, m->msgId.seq);
   KeyType::iterator it = ns->my_pe->pendingRMsgs.find(key);
-  if(it == ns->my_pe->pendingRMsgs.end() || it->second.front() == -1) {
+  
+  /* The "if" condition block is an impossible condition. Only the "else" is relevant */
+  /*if(it == ns->my_pe->pendingRMsgs.end() || it->second.front() == -1) {
     b->c1 = 1;
     ns->my_pe->pendingRMsgs[key].push_back(-1);
-  } else {
+  } else {*/
+
+
+   /*TODO: If this was a non-blocking call, then send the data only if the MPI_Wait was posted */
     b->c2 = 1;
     assert(it->second.size() != 0);
     Task *t = &ns->my_pe->myTasks[it->second.front()];
@@ -1195,11 +1203,15 @@ static void handle_recv_post_event(
     if(it->second.size() == 0) {
       ns->my_pe->pendingRMsgs.erase(it);
     }
-  }
-#if DEBUG_PRINT
-  printf("%d: Recv post recevied %d %d %d %d, found %d %d\n", ns->my_pe_num, 
-      m->msgId.pe, m->msgId.id, m->msgId.comm, m->msgId.seq, b->c2, m->executed.taskid);
-#endif
+}
+
+static void handle_rnz_start_event(
+		proc_state * ns,
+		tw_bf * b,
+		proc_msg * m,
+		tw_lp * lp)
+{
+  /*Store the RNZ_START message in some data structure similar to pendingRMsgs */
 }
 
 static void handle_recv_post_rev_event(
@@ -1365,7 +1377,7 @@ static tw_stime exec_task(
 
     /* MPI_Wait for MPI_Irecv */
     if(t->event_id == TRACER_RECV_COMP_EVT 
-       && !PE_noMsgDep(ns->my_pe, task_id.iter, task_id.taskid) {
+       && !PE_noMsgDep(ns->my_pe, task_id.iter, task_id.taskid)) {
       b->c7 = 1;
       seq = ns->my_pe->recvSeq[t->myEntry.node];
 
@@ -1583,6 +1595,7 @@ static tw_stime exec_task(
         }
 #endif
 
+        /* Eager */
         if(isCopying) {
           m->model_net_calls++;
           /*Eager - blocking or non-blocking - send out the data immediately. Trigger a RECV_MSG event on receiver side*/
@@ -1664,10 +1677,12 @@ static tw_stime exec_task(
 
     if(t->event_id == TRACER_SEND_COMP_EVT) {
       std::map<int, int>::iterator it = ns->my_pe->pendingReqs.find(t->req_id);
+      /* Indicate that the wait has been posted */
       if(it !=  ns->my_pe->pendingReqs.end()) {
         if(it->second == -1) {
           b->c28 = 1;
           ns->my_pe->pendingReqs[t->req_id] = task_id.taskid;
+          }
         }
         b->c29 = 1;
         return 0;
