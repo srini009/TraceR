@@ -1192,16 +1192,31 @@ static void handle_recv_post_event(
   } else {*/
 
 
-   /*TODO: If this was a non-blocking call, then send the data only if the MPI_Wait was posted */
     b->c2 = 1;
     assert(it->second.size() != 0);
     Task *t = &ns->my_pe->myTasks[it->second.front()];
-    m->model_net_calls = 1;
-    delegate_send_msg(ns, lp, m, b, t, it->second.front(), 0);
-    m->executed.taskid = it->second.front();
-    it->second.pop_front();
-    if(it->second.size() == 0) {
-      ns->my_pe->pendingRMsgs.erase(it);
+
+    if(!t->isNonBlocking()) {
+      m->model_net_calls = 1;
+      delegate_send_msg(ns, lp, m, b, t, it->second.front(), 0);
+      m->executed.taskid = it->second.front();
+      it->second.pop_front();
+      if(it->second.size() == 0) {
+        ns->my_pe->pendingRMsgs.erase(it);
+      }
+    }
+    else { /* Non-blocking */
+       if(wait_is_posted) {
+         m->model_net_calls = 1;
+         delegate_send_msg(ns, lp, m, b, t, it->second.front(), 0);
+         m->executed.taskid = it->second.front();
+         it->second.pop_front();
+         if(it->second.size() == 0) {
+           ns->my_pe->pendingRMsgs.erase(it);
+         }
+       } else {
+         // store the message until the MPI_Wait is posted
+       }
     }
 }
 
@@ -1583,18 +1598,12 @@ static tw_stime exec_task(
       }
       sendOffset = soft_delay_mpi;
 
+      /* Eager - same node */
       if(node == ns->my_pe_num) {
         exec_comp(ns, task_id.iter, MsgEntry_getID(taskEntry), 
           taskEntry->msgId.comm, sendOffset+copyTime+delay, 1, lp);
         sendFinishTime = sendOffset + copyTime;
       } else {
-#if DEBUG_PRINT
-        if(ns->my_pe_num ==  1222 || ns->my_pe_num == 1217) {
-          printf("%d SEND to: %d  %d %d %lld\n", ns->my_pe_num, node, 
-            taskEntry->msgId.id, taskEntry->msgId.comm, ns->my_pe->sendSeq[node]);
-        }
-#endif
-
         /* Eager */
         if(isCopying) {
           m->model_net_calls++;
@@ -1647,11 +1656,6 @@ static tw_stime exec_task(
               ns->my_pe->pendingRMsgs.erase(it);
             }
           }*/
-#if DEBUG_PRINT
-          printf("%d: Send %d %d %d %d, nonblock %d/%d, wait %d, do %d, task %d\n", ns->my_pe_num, 
-           taskEntry->node, taskEntry->msgId.id, taskEntry->msgId.comm, 
-           taskEntry->msgId.seq, t->isNonBlocking, t->req_id, b->c26, b->c27, task_id.taskid);
-#endif
           if(!t->isNonBlocking) return 0;
           sendFinishTime += sendOffset+copyTime+nic_delay;
         }
@@ -1682,8 +1686,13 @@ static tw_stime exec_task(
         if(it->second == -1) {
           b->c28 = 1;
           ns->my_pe->pendingReqs[t->req_id] = task_id.taskid;
-          }
         }
+      }
+
+      if(received_recv_post_message) {
+        // send message using delegate_send_msg
+      } else {
+        //Wait
         b->c29 = 1;
         return 0;
       } 
