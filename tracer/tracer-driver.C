@@ -1226,7 +1226,26 @@ static void handle_rnz_start_event(
 		proc_msg * m,
 		tw_lp * lp)
 {
-  /*Store the RNZ_START message in some data structure similar to pendingRMsgs */
+  /* Store the RNZ_START message in some data structure similar to pendingRMsgs */
+  ns->pe->pendingRnzMsgs.push_back(m);
+  need_to_reply_to_rendezvous_start(ns->my_pe) = true;
+  received_rendezvous_start(ns->my_pe) = true;
+
+  Task *t = &ns->my_pe->myTasks[it->second.front()];
+
+  /* Task is waiting (either MPI_Recv or MPI_Wait), send the RECV_POST message */
+  if(t->id == m.id) {
+    m->model_net_calls++;
+    send_msg(ns, 16, ns->my_pe->currIter, &t->myEntry.msgId, seq,  
+    pe_to_lpid(t->myEntry.node, ns->my_job), nic_delay, RECV_POST, lp);
+     
+    recvFinishTime += nic_delay;
+    need_to_reply_to_rendezvous_start(ns->my_pe) = false;
+    received_rendezvous_start(ns->my_pe) = true;
+
+  }
+    
+  
 }
 
 static void handle_recv_post_rev_event(
