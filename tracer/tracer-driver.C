@@ -1240,7 +1240,7 @@ static void handle_rnz_start_event(
     pe_to_lpid(t->myEntry.node, ns->my_job), nic_delay, RECV_POST, lp);
      
     recvFinishTime += nic_delay;
-    need_to_reply_to_rendezvous_start(ns->my_pe) = false;
+    need_to_reply_to_rendezvous_start(ns->my_pe) = false; //  ns->pe->pendingRnzMsgs.erase(end)?
     received_rendezvous_start(ns->my_pe) = true;
 
   }
@@ -1362,7 +1362,7 @@ static tw_stime exec_task(
       ns->my_pe->pendingRReqs[t->req_id] = seq;
       ns->my_pe->recvSeq[t->myEntry.node]++;
 
-      if(is_message_rendezvous && need_to_reply_to_rendezvous_start(ns->my_pe)) {
+      if(is_message_rendezvous && need_to_reply_to_rendezvous_start(ns->my_pe)) 
         m->model_net_calls++;
         send_msg(ns, 16, ns->my_pe->currIter, &t->myEntry.msgId, seq,  
         pe_to_lpid(t->myEntry.node, ns->my_job), nic_delay, RECV_POST, lp);
@@ -1437,10 +1437,6 @@ static tw_stime exec_task(
         received_rendezvous_start(ns->my_pe) = true;
       }
     
-      if(!received_rendezvous_start(ns->my_pe)) {
-        return 0; // Wait
-      }
-
       MsgKey key(t->myEntry.node, t->myEntry.msgId.id, t->myEntry.msgId.comm, seq);
 
       KeyType::iterator it = ns->my_pe->pendingMsgs.find(key);
@@ -1609,7 +1605,7 @@ static tw_stime exec_task(
     tw_stime delay = soft_latency; //intra node latency
     double sendFinishTime = 0;
 
-    /* Triggered with MPI_Send or MPI_Isend*/
+    /* Triggered with MPI_Send or MPI_Isend */
     if(t->event_id == TRACER_SEND_EVT) {
       b->c23 = 1;
       MsgEntry *taskEntry = &t->myEntry;
@@ -1646,7 +1642,7 @@ static tw_stime exec_task(
            *Non-blocking or not, sender just sends a 16-byte "RNZ_START" message here in an Eager manner. 
            *It is assumed that the sender inside an MPI_Isend has just enough time to send the control
            *message and return. It does not sit around waiting for receiver to reply. 
-           *More importantly, no data is transferred inside MPI_Isend*/
+           *More importantly, no data is transferred inside MPI_Isend */
           m->model_net_calls++;
           send_msg(ns, 16,
               task_id.iter, &taskEntry->msgId, ns->my_pe->sendSeq[node]++,
