@@ -1362,7 +1362,7 @@ static tw_stime exec_task(
       ns->my_pe->pendingRReqs[t->req_id] = seq;
       ns->my_pe->recvSeq[t->myEntry.node]++;
 
-      if(is_message_rendezvous && need_to_reply_to_rendezvous_start(ns->my_pe)) 
+      if(is_message_rendezvous && need_to_reply_to_rendezvous_start(ns->my_pe)) { 
         m->model_net_calls++;
         send_msg(ns, 16, ns->my_pe->currIter, &t->myEntry.msgId, seq,  
         pe_to_lpid(t->myEntry.node, ns->my_job), nic_delay, RECV_POST, lp);
@@ -1707,15 +1707,15 @@ static tw_stime exec_task(
           b->c28 = 1;
           ns->my_pe->pendingReqs[t->req_id] = task_id.taskid;
         }
-      }
 
-      if(received_recv_post_message) {
-        // send message using delegate_send_msg
-      } else {
-        //Wait
-        b->c29 = 1;
-        return 0;
-      } 
+        if(received_recv_post_message) {
+          // send message using delegate_send_msg
+        } else {
+          //Wait
+          b->c29 = 1;
+          return 0;
+        } 
+      }
     }
 #endif
     
