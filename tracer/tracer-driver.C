@@ -1362,15 +1362,28 @@ static tw_stime exec_task(
       ns->my_pe->pendingRReqs[t->req_id] = seq;
       ns->my_pe->recvSeq[t->myEntry.node]++;
 
-      if(is_message_rendezvous && need_to_reply_to_rendezvous_start(ns->my_pe)) { 
-        m->model_net_calls++;
-        send_msg(ns, 16, ns->my_pe->currIter, &t->myEntry.msgId, seq,  
-        pe_to_lpid(t->myEntry.node, ns->my_job), nic_delay, RECV_POST, lp);
-      
-        recvFinishTime += nic_delay;
+      /*Check if Rendezvous start has arrived and needs replying
+       * If it has arrived, reply with a RECV_POST. Else make a note to reply when it does arrive */
+      MsgKey key(t->myEntry.node, t->myEntry.msgId.id, t->myEntry.msgId.comm, seq);
+      KeyType::iterator it = ns->my_pe->pendingRnzStartMsgs.find(key);
 
-        need_to_reply_to_rendezvous_start(ns->my_pe) = false;
-        received_rendezvous_start(ns->my_pe) = true;
+      if(is_message_rendezvous) { 
+        if(it == ns->my_pe->pendingRnzStartMsgs.end()) {
+          ns->my_pe->pendingRnzStartMsgs[key].push_back(task_id.taskid);
+        } else { /*Message is available. Take it!*/
+          assert(it->second.front() == -1);
+          
+          m->model_net_calls++;
+          send_msg(ns, 16, ns->my_pe->currIter, &t->myEntry.msgId, seq,  
+            pe_to_lpid(t->myEntry.node, ns->my_job), nic_delay, RECV_POST, lp);
+      
+          recvFinishTime += nic_delay;
+          
+          ns->my_pe->pendingRnzStartMsgs[key].pop_front();
+          if(it->second.size() == 0) {
+            ns->my_pe->pendingRnzStartMsgs.erase(it);
+          }
+        }   
       }
     }
 
@@ -1399,15 +1412,24 @@ static tw_stime exec_task(
         }
       }
       
-      if(is_message_rendezvous && regular_receive_and_not_received_message && need_to_reply_to_rendezvous_start(ns->my_pe)) {
-        m->model_net_calls++;
-        send_msg(ns, 16, ns->my_pe->currIter, &t->myEntry.msgId, seq,  
-        pe_to_lpid(t->myEntry.node, ns->my_job), nic_delay, RECV_POST, lp);
-      
-        recvFinishTime += nic_delay;
+      KeyType::iterator it_rnzStart = ns->my_pe->pendingRnzStartMsgs.find(key);
+      if(is_message_rendezvous && regular_receive_and_not_received_message) {
+        if(it_rnzStart == ns->my_pe->pendingRnzStartMsgs.end()) {
+          ns->my_pe->pendingRnzStartMsgs[key].push_back(task_id.taskid);
+        } else { /*Message is available. Take it!*/
+          assert(it_rnzStart->second.front() == -1);
+          ns->my_pe->pendingRnzStartMsgs[key].pop_front();
 
-        need_to_reply_to_rendezvous_start(ns->my_pe) = false;
-        received_rendezvous_start(ns->my_pe) = true;
+          m->model_net_calls++;
+          send_msg(ns, 16, ns->my_pe->currIter, &t->myEntry.msgId, seq,  
+            pe_to_lpid(t->myEntry.node, ns->my_job), nic_delay, RECV_POST, lp);
+      
+          recvFinishTime += nic_delay;
+         
+          if(it_rnzStart->second.size() == 0) {
+            ns->my_pe->pendingRnzStartMsgs.erase(it_rnzStart);
+          }
+        }   
       }
     }
 
@@ -1427,14 +1449,25 @@ static tw_stime exec_task(
       
       /*Send RECV_POST ONLY if the RNZ_START message was received
      *  This is valid in both MPI_Recv as well as MPI_Irecv modes */
-      if(is_message_rendezvous && need_to_reply_to_rendezvous_start(ns->my_pe)) {
-        m->model_net_calls++;
-        send_msg(ns, 16, ns->my_pe->currIter, &t->myEntry.msgId, seq,  
-          pe_to_lpid(t->myEntry.node, ns->my_job), nic_delay, RECV_POST, lp);
+      MsgKey key_rnzStart(t->myEntry.node, t->myEntry.msgId.id, t->myEntry.msgId.comm, seq);
+      KeyType::iterator it_rnzStart = ns->my_pe->pendingRnzStartMsgs.find(key_rnzStart);
+      if(is_message_rendezvous) {
+        if(it_rnzStart == ns->my_pe->pendingRnzStartMsgs.end()) {
+          ns->my_pe->pendingRnzStartMsgs[key_rnzStart].push_back(task_id.taskid);
+        } else { /*Message is available. Take it!*/
+          assert(it_rnzStart->second.front() == -1);
+          ns->my_pe->pendingRnzStartMsgs[key_rnzStart].pop_front();
+
+          m->model_net_calls++;
+          send_msg(ns, 16, ns->my_pe->currIter, &t->myEntry.msgId, seq,  
+            pe_to_lpid(t->myEntry.node, ns->my_job), nic_delay, RECV_POST, lp);
       
-        recvFinishTime += nic_delay;
-        need_to_reply_to_rendezvous_start(ns->my_pe) = false;
-        received_rendezvous_start(ns->my_pe) = true;
+          recvFinishTime += nic_delay;
+         
+          if(it_rnzStart->second.size() == 0) {
+            ns->my_pe->pendingRnzStartMsgs.erase(it_rnzStart);
+          }
+        }   
       }
     
       MsgKey key(t->myEntry.node, t->myEntry.msgId.id, t->myEntry.msgId.comm, seq);
