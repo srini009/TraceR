@@ -1226,26 +1226,26 @@ static void handle_rnz_start_event(
 		proc_msg * m,
 		tw_lp * lp)
 {
-  /* Store the RNZ_START message in some data structure similar to pendingRMsgs */
-  ns->pe->pendingRnzMsgs.push_back(m);
-  need_to_reply_to_rendezvous_start(ns->my_pe) = true;
-  received_rendezvous_start(ns->my_pe) = true;
+  MsgKey key(m->msgId.pe, m->msgId.id, m->msgId.comm, m->msgId.seq);
+  KeyType::iterator it = ns->my_pe->pendingRnzStartMsgs.find(key);
 
-  Task *t = &ns->my_pe->myTasks[it->second.front()];
+  if(it == ns->my_pe->pendingRnzStartMsgs.end() || it->second.front() == -1) {
+    ns->my_pe->pendingRnzStartMsgs[key].push_back(-1);
+  } else {
+    Task *t = &ns->my_pe->myTasks[it->second.front()];
 
-  /* Task is waiting (either MPI_Recv or MPI_Wait), send the RECV_POST message */
-  if(t->id == m.id) {
-    m->model_net_calls++;
-    send_msg(ns, 16, ns->my_pe->currIter, &t->myEntry.msgId, seq,  
-    pe_to_lpid(t->myEntry.node, ns->my_job), nic_delay, RECV_POST, lp);
-     
-    recvFinishTime += nic_delay;
-    need_to_reply_to_rendezvous_start(ns->my_pe) = false; //  ns->pe->pendingRnzMsgs.erase(end)?
-    received_rendezvous_start(ns->my_pe) = true;
+    /* Task is waiting (either MPI_Recv or MPI_Wait), send the RECV_POST message */
+    if((t->event_id == TRACER_RECV_COMP_EVT) || (t->event_id == TRACER_RECV_EVT)) {
+      m->model_net_calls++;
+      send_msg(ns, 16, ns->my_pe->currIter, &t->myEntry.msgId, seq,  
+        pe_to_lpid(t->myEntry.node, ns->my_job), nic_delay, RECV_POST, lp);
+      ns->my_pe->pendingRnzStartMsgs[key].pop_front();
 
-  }
-    
-  
+      if(it->second.size() == 0) {
+        ns->my_pe->pendingRnzStartMsgs.erase(it);
+      }
+    }
+  }  
 }
 
 static void handle_recv_post_rev_event(
@@ -1362,7 +1362,7 @@ static tw_stime exec_task(
       ns->my_pe->pendingRReqs[t->req_id] = seq;
       ns->my_pe->recvSeq[t->myEntry.node]++;
 
-      /*Check if Rendezvous start has arrived and needs replying
+      /* Check if Rendezvous start has arrived and needs replying
        * If it has arrived, reply with a RECV_POST. Else make a note to reply when it does arrive */
       MsgKey key(t->myEntry.node, t->myEntry.msgId.id, t->myEntry.msgId.comm, seq);
       KeyType::iterator it = ns->my_pe->pendingRnzStartMsgs.find(key);
@@ -1700,15 +1700,7 @@ static tw_stime exec_task(
           if(it == ns->my_pe->pendingRMsgs.end() || (it->second.front() != -1)) {
             b->c26 = 1;
             ns->my_pe->pendingRMsgs[key].push_back(task_id.taskid);
-          } /*else {
-            b->c27 = 1;
-            m->model_net_calls++;
-            delegate_send_msg(ns, lp, m, b, t, task_id.taskid, sendOffset+delay);
-            it->second.pop_front();
-            if(it->second.size() == 0) {
-              ns->my_pe->pendingRMsgs.erase(it);
-            }
-          }*/
+          }
           if(!t->isNonBlocking) return 0;
           sendFinishTime += sendOffset+copyTime+nic_delay;
         }
