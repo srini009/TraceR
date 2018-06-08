@@ -1227,25 +1227,22 @@ static void handle_rnz_start_event(
 		tw_lp * lp)
 {
   MsgKey key(m->msgId.pe, m->msgId.id, m->msgId.comm, m->msgId.seq);
-  KeyType::iterator it = ns->my_pe->pendingRnzStartMsgs.find(key);
+  ns->my_pe->pendingRnzStartMsgs[key].push_back(-1);
 
-  if(it == ns->my_pe->pendingRnzStartMsgs.end() || it->second.front() == -1) {
-    ns->my_pe->pendingRnzStartMsgs[key].push_back(-1);
-  } else {
-    Task *t = &ns->my_pe->myTasks[it->second.front()];
+  Task *t = &ns->my_pe->myTasks[it->second.front()];
 
-    /* Task is waiting (either MPI_Recv or MPI_Wait), send the RECV_POST message */
-    if((t->event_id == TRACER_RECV_COMP_EVT) || (t->event_id == TRACER_RECV_EVT)) {
-      m->model_net_calls++;
-      send_msg(ns, 16, ns->my_pe->currIter, &t->myEntry.msgId, seq,  
-        pe_to_lpid(t->myEntry.node, ns->my_job), nic_delay, RECV_POST, lp);
-      ns->my_pe->pendingRnzStartMsgs[key].pop_front();
+  /* Task is waiting (either MPI_Recv or MPI_Wait), send the RECV_POST message */
+  if((t->event_id == TRACER_RECV_COMP_EVT) || (t->event_id == TRACER_RECV_EVT)) {
+    m->model_net_calls++;
+    send_msg(ns, 16, ns->my_pe->currIter, &t->myEntry.msgId, seq,  
+      pe_to_lpid(t->myEntry.node, ns->my_job), nic_delay, RECV_POST, lp);
 
-      if(it->second.size() == 0) {
-        ns->my_pe->pendingRnzStartMsgs.erase(it);
-      }
+    ns->my_pe->pendingRnzStartMsgs[key].pop_front();
+
+    if(it->second.size() == 0) {
+      ns->my_pe->pendingRnzStartMsgs.erase(it);
     }
-  }  
+  }
 }
 
 static void handle_recv_post_rev_event(
@@ -1356,7 +1353,12 @@ static tw_stime exec_task(
     if(t->myEntry.node != ns->my_pe_num && t->myEntry.msgId.size > eager_limit) 
       is_message_rendezvous = true;
 
-    /* MPI_Irecv. */
+    /* MPI_Irecv 
+     * Control flow:
+     * 1. Add entry for receive request to pendingRReqs
+     * 2. Is message is rendezvous, check in pendingRnzStartMsgs to see if RNZ_START message has arrived
+     * 3. If it has arrived, send a RECV_POST message back to the sender, acknowledging RNZ_START, and remove the  pendingRnzStartMsgs list associated with this message if need be.
+     * 4. Invoke exec_complete */
     if(t->event_id == TRACER_RECV_POST_EVT) {
       seq = ns->my_pe->recvSeq[t->myEntry.node];
       ns->my_pe->pendingRReqs[t->req_id] = seq;
@@ -1368,9 +1370,7 @@ static tw_stime exec_task(
       KeyType::iterator it = ns->my_pe->pendingRnzStartMsgs.find(key);
 
       if(is_message_rendezvous) { 
-        if(it == ns->my_pe->pendingRnzStartMsgs.end()) {
-          ns->my_pe->pendingRnzStartMsgs[key].push_back(task_id.taskid);
-        } else { /*Message is available. Take it!*/
+        if(it != ns->my_pe->pendingRnzStartMsgs.end()) {
           assert(it->second.front() == -1);
           
           m->model_net_calls++;
@@ -1387,7 +1387,13 @@ static tw_stime exec_task(
       }
     }
 
-    /* MPI_Recv */
+    /* MPI_Recv 
+     * Control flow: 
+     * 1. Check if the actual data message is available
+     * 2. If it is, then take it, and invoke exec_complete 
+     * 3. If it hasn't arrived, make a note in pendingMsgs by adding the current task_id to the list, and set regular_receive_and_not_received_message=true
+     * 4. If the message is rendezvous, and the data message has not arrived yet, then perform tasks the same tasks 2-4 as in MPI_Irecv
+     * 5. Wait */
     if (t->event_id == TRACER_RECV_EVT && !PE_noMsgDep(ns->my_pe, task_id.iter, task_id.taskid)) {
       b->c7 = 1;
       seq = ns->my_pe->recvSeq[t->myEntry.node];
@@ -1414,9 +1420,7 @@ static tw_stime exec_task(
       
       KeyType::iterator it_rnzStart = ns->my_pe->pendingRnzStartMsgs.find(key);
       if(is_message_rendezvous && regular_receive_and_not_received_message) {
-        if(it_rnzStart == ns->my_pe->pendingRnzStartMsgs.end()) {
-          ns->my_pe->pendingRnzStartMsgs[key].push_back(task_id.taskid);
-        } else { /*Message is available. Take it!*/
+        if(it_rnzStart != ns->my_pe->pendingRnzStartMsgs.end()) {
           assert(it_rnzStart->second.front() == -1);
           ns->my_pe->pendingRnzStartMsgs[key].pop_front();
 
@@ -1433,14 +1437,17 @@ static tw_stime exec_task(
       }
     }
 
-    /* MPI_Wait for MPI_Irecv */
+    /* MPI_Wait for MPI_Irecv
+     * Control flow:
+     * 1. Verify that the corresponding receive request has indeed been posted
+     * 2. Perform steps 2-4 described in the control flow of MPI_Irecv
+     * 3. */
     if(t->event_id == TRACER_RECV_COMP_EVT 
        && !PE_noMsgDep(ns->my_pe, task_id.iter, task_id.taskid)) {
       b->c7 = 1;
       seq = ns->my_pe->recvSeq[t->myEntry.node];
 
-      /*Assert that the receive has indeed been posted for the MPI_Wait, and remove it from list of pending receive requests. Let this be.
-       *TODO: Handle case where MPI_Wait responds to RNZ_START */
+      /*Assert that the receive has indeed been posted for the MPI_Wait, and remove it from list of pending receive requests. Let this be.*/
       std::map<int, int64_t>::iterator it = ns->my_pe->pendingRReqs.find(t->req_id);
       assert(it != ns->my_pe->pendingRReqs.end());
       seq = it->second;
@@ -1452,9 +1459,7 @@ static tw_stime exec_task(
       MsgKey key_rnzStart(t->myEntry.node, t->myEntry.msgId.id, t->myEntry.msgId.comm, seq);
       KeyType::iterator it_rnzStart = ns->my_pe->pendingRnzStartMsgs.find(key_rnzStart);
       if(is_message_rendezvous) {
-        if(it_rnzStart == ns->my_pe->pendingRnzStartMsgs.end()) {
-          ns->my_pe->pendingRnzStartMsgs[key_rnzStart].push_back(task_id.taskid);
-        } else { /*Message is available. Take it!*/
+        if(it_rnzStart != ns->my_pe->pendingRnzStartMsgs.end()) {
           assert(it_rnzStart->second.front() == -1);
           ns->my_pe->pendingRnzStartMsgs[key_rnzStart].pop_front();
 
