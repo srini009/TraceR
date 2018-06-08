@@ -1224,14 +1224,19 @@ static void handle_rnz_start_event(
 		tw_lp * lp)
 {
   MsgKey key(m->msgId.pe, m->msgId.id, m->msgId.comm, m->msgId.seq);
-  ns->my_pe->pendingRnzStartMsgs[key].push_back(-1);
+  KeyType::iterator it = ns->my_pe->pendingRnzStartMsgs.find(key);
+
+  if(it == ns->my_pe->pendingRnzStartMsgs.end()) {
+    ns->my_pe->pendingRnzStartMsgs[key].push_back(-1);
+    return;
+  }
 
   Task *t = &ns->my_pe->myTasks[it->second.front()];
 
   /* Task is waiting (either MPI_Recv or MPI_Wait), send the RECV_POST message */
   if((t->event_id == TRACER_RECV_COMP_EVT) || (t->event_id == TRACER_RECV_EVT)) {
     m->model_net_calls++;
-    send_msg(ns, 16, ns->my_pe->currIter, &t->myEntry.msgId, seq,  
+    send_msg(ns, 16, ns->my_pe->currIter, &t->myEntry.msgId, m->msgId.seq,  
       pe_to_lpid(t->myEntry.node, ns->my_job), nic_delay, RECV_POST, lp);
 
     ns->my_pe->pendingRnzStartMsgs[key].pop_front();
@@ -1378,7 +1383,10 @@ static tw_stime exec_task(
           if(it->second.size() == 0) {
             ns->my_pe->pendingRnzStartMsgs.erase(it);
           }
-        }   
+        }
+        else if (it == ns->my_pe->pendingRnzStartMsgs.end()) {
+          ns->my_pe->pendingRnzStartMsgs[key].push_back(task_id.taskid);
+        }
       }
     }
 
@@ -1428,7 +1436,11 @@ static tw_stime exec_task(
           if(it_rnzStart->second.size() == 0) {
             ns->my_pe->pendingRnzStartMsgs.erase(it_rnzStart);
           }
-        }   
+        }
+   
+        else if(it_rnzStart == ns->my_pe->pendingRnzStartMsgs.end()) {
+          ns->my_pe->pendingRnzStartMsgs[key].push_back(task_id.taskid);
+        }
       }
     }
 
@@ -1466,24 +1478,28 @@ static tw_stime exec_task(
           if(it_rnzStart->second.size() == 0) {
             ns->my_pe->pendingRnzStartMsgs.erase(it_rnzStart);
           }
-        }   
+        }
+
+        else if(it_rnzStart == ns->my_pe->pendingRnzStartMsgs.end()) {
+          ns->my_pe->pendingRnzStartMsgs[key_rnzStart].push_back(task_id.taskid);
+        }
       }
     
       MsgKey key(t->myEntry.node, t->myEntry.msgId.id, t->myEntry.msgId.comm, seq);
 
-      KeyType::iterator it = ns->my_pe->pendingMsgs.find(key);
+      KeyType::iterator it_pendingMsgs = ns->my_pe->pendingMsgs.find(key);
       /*Message is not available. Expect to receive it.*/
-      if(it == ns->my_pe->pendingMsgs.end()) {
+      if(it_pendingMsgs == ns->my_pe->pendingMsgs.end()) {
         assert(PE_is_busy(ns->my_pe) == false);
         ns->my_pe->pendingMsgs[key].push_back(task_id.taskid);
         b->c21 = 1;
         return 0;
       } else { /*Message is available. Take it!*/
         b->c22 = 1;
-        assert(it->second.front() == -1);
+        assert(it_pendingMsgs->second.front() == -1);
         ns->my_pe->pendingMsgs[key].pop_front();
-        if(it->second.size() == 0) {
-          ns->my_pe->pendingMsgs.erase(it);
+        if(it_pendingMsgs->second.size() == 0) {
+          ns->my_pe->pendingMsgs.erase(it_pendingMsgs);
         }
       }
     }
@@ -1732,13 +1748,14 @@ static tw_stime exec_task(
           ns->my_pe->pendingReqs[t->req_id] = task_id.taskid;
         }
 
+        MsgEntry *taskEntry = &t->myEntry;
         MsgKey key(taskEntry->node, taskEntry->msgId.id, taskEntry->msgId.comm, 
             taskEntry->msgId.seq);
         KeyType::iterator it_rMsg = ns->my_pe->pendingRMsgs.find(key);
 
         /* If recv_post is received, send out the data message immediately */
 
-        if((it_rMsg != ns->my_pe->pendingRMsgs.end()) && (it_rMsg->second.front() == -1) {
+        if((it_rMsg != ns->my_pe->pendingRMsgs.end()) && (it_rMsg->second.front() == -1)) {
           m->model_net_calls++;
           delegate_send_msg(ns, lp, m, b, t, it_rMsg->second.front(), 0);
           m->executed.taskid = it_rMsg->second.front();
