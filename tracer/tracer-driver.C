@@ -1189,7 +1189,7 @@ static void handle_recv_post_event(
   assert(it->second.size() != 0);
   Task *t = &ns->my_pe->myTasks[it->second.front()];
 
-  if(!t->isNonBlocking()) {
+  if(!t->isNonBlocking) {
     m->model_net_calls = 1;
     delegate_send_msg(ns, lp, m, b, t, it->second.front(), 0);
     m->executed.taskid = it->second.front();

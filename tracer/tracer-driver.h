@@ -165,6 +165,13 @@ static void handle_recv_post_event(
     proc_msg * m,
    tw_lp * lp);
 
+//RDMA protocol specific functions
+static void handle_rnz_start_event(
+                proc_state * ns,
+                tw_bf * b,
+                proc_msg * m,
+                tw_lp * lp);
+
 //reverse event handler declarations
 static void handle_kickoff_rev_event(
     proc_state * ns,
