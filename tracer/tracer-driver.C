@@ -1691,7 +1691,10 @@ static tw_stime exec_task(
            *It is assumed that the sender inside an MPI_Isend has just enough time to send the control
            *message and return. It does not sit around waiting for receiver to reply. 
            *More importantly, no data is transferred inside MPI_Isend */
-          m->model_net_calls++;
+          m->model_net_calls++; 
+          copyTime = 16*copy_per_byte; //Control message copy time
+
+          /* Send out the control message */
           send_msg(ns, 16,
               task_id.iter, &taskEntry->msgId, ns->my_pe->sendSeq[node]++,
               pe_to_lpid(node, ns->my_job), sendOffset+copyTime+nic_delay+delay, 
