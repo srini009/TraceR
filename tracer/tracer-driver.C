@@ -1453,7 +1453,6 @@ static tw_stime exec_task(
     if(t->event_id == TRACER_RECV_COMP_EVT 
        && !PE_noMsgDep(ns->my_pe, task_id.iter, task_id.taskid)) {
       b->c7 = 1;
-      seq = ns->my_pe->recvSeq[t->myEntry.node];
 
       /*Assert that the receive has indeed been posted for the MPI_Wait, and remove it from list of pending receive requests. Let this be.*/
       std::map<int, int64_t>::iterator it = ns->my_pe->pendingRReqs.find(t->req_id);
@@ -1464,6 +1463,7 @@ static tw_stime exec_task(
       
       MsgKey key_rnzStart(t->myEntry.node, t->myEntry.msgId.id, t->myEntry.msgId.comm, seq);
       KeyType::iterator it_rnzStart = ns->my_pe->pendingRnzStartMsgs.find(key_rnzStart);
+
       if(is_message_rendezvous) {
         if(it_rnzStart != ns->my_pe->pendingRnzStartMsgs.end()) {
           assert(it_rnzStart->second.front() == -1);
