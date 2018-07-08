@@ -1226,10 +1226,7 @@ static void handle_rnz_start_event(
   MsgKey key(m->msgId.pe, m->msgId.id, m->msgId.comm, m->msgId.seq);
   KeyType::iterator it = ns->my_pe->pendingRnzStartMsgs.find(key);
 
-  if(it == ns->my_pe->pendingRnzStartMsgs.end()) {
-    ns->my_pe->pendingRnzStartMsgs[key].push_back(-1);
-    return;
-  }
+  ns->my_pe->pendingRnzStartMsgs[key].push_back(-1);
 
   Task *t = &ns->my_pe->myTasks[it->second.front()];
 
@@ -1362,8 +1359,10 @@ static tw_stime exec_task(
      * 3. If it has arrived, send a RECV_POST message back to the sender, acknowledging RNZ_START, and remove the  pendingRnzStartMsgs list associated with this message if need be.
      * 4. Invoke exec_complete */
     if(t->event_id == TRACER_RECV_POST_EVT) {
+      /* Grab the per-node seq number - this must be constant across the ENTIRE message (control+data message)*/
       seq = ns->my_pe->recvSeq[t->myEntry.node];
       ns->my_pe->pendingRReqs[t->req_id] = seq;
+      /* Increment once and ONLY once per message. By message, I mean control+data message between 2 PE's*/
       ns->my_pe->recvSeq[t->myEntry.node]++;
 
       MsgKey key(t->myEntry.node, t->myEntry.msgId.id, t->myEntry.msgId.comm, seq);
@@ -1372,21 +1371,20 @@ static tw_stime exec_task(
       if(is_message_rendezvous) { 
         if(it != ns->my_pe->pendingRnzStartMsgs.end()) {
           assert(it->second.front() == -1);
-          
           m->model_net_calls++;
+
           send_msg(ns, 16, ns->my_pe->currIter, &t->myEntry.msgId, seq,  
             pe_to_lpid(t->myEntry.node, ns->my_job), nic_delay, RECV_POST, lp);
       
           recvFinishTime += nic_delay;
           
           ns->my_pe->pendingRnzStartMsgs[key].pop_front();
+
           if(it->second.size() == 0) {
             ns->my_pe->pendingRnzStartMsgs.erase(it);
           }
         }
-        else if (it == ns->my_pe->pendingRnzStartMsgs.end()) {
-          ns->my_pe->pendingRnzStartMsgs[key].push_back(task_id.taskid);
-        }
+
       }
     }
 
@@ -1437,10 +1435,6 @@ static tw_stime exec_task(
             ns->my_pe->pendingRnzStartMsgs.erase(it_rnzStart);
           }
         }
-   
-        else if(it_rnzStart == ns->my_pe->pendingRnzStartMsgs.end()) {
-          ns->my_pe->pendingRnzStartMsgs[key].push_back(task_id.taskid);
-        }
       }
     }
 
@@ -1471,17 +1465,13 @@ static tw_stime exec_task(
 
           m->model_net_calls++;
           send_msg(ns, 16, ns->my_pe->currIter, &t->myEntry.msgId, seq,  
-            pe_to_lpid(t->myEntry.node, ns->my_job), nic_delay, RECV_POST, lp);
+           pe_to_lpid(t->myEntry.node, ns->my_job), nic_delay, RECV_POST, lp);
       
           recvFinishTime += nic_delay;
          
           if(it_rnzStart->second.size() == 0) {
             ns->my_pe->pendingRnzStartMsgs.erase(it_rnzStart);
           }
-        }
-
-        else if(it_rnzStart == ns->my_pe->pendingRnzStartMsgs.end()) {
-          ns->my_pe->pendingRnzStartMsgs[key_rnzStart].push_back(task_id.taskid);
         }
       }
     
