@@ -1186,9 +1186,10 @@ static void handle_recv_post_event(
   KeyType::iterator it = ns->my_pe->pendingRMsgs.find(key);
   
   b->c2 = 1;
-  assert(it->second.size() != 0);
+  assert(it->second.size() != 0); //Assert that we have indeed added the entry!
   Task *t = &ns->my_pe->myTasks[it->second.front()];
 
+  /* If the task is blocking, then it must be an MPI_Send waiting for the RECV_POST message */
   if(!t->isNonBlocking) {
     m->model_net_calls = 1;
     delegate_send_msg(ns, lp, m, b, t, it->second.front(), 0);
@@ -1212,7 +1213,8 @@ static void handle_recv_post_event(
     else { // store the message until the MPI_Wait is posted
       it->second.pop_front();
       assert(it->second.size() == 0);
-      ns->my_pe->pendingRMsgs[key].push_back(-1); //Indicate that the recv_post has arrived
+      //Utter garbage. Not the right way to indicate that the RECV_POST has arrived
+      ns->my_pe->pendingRMsgs[key].push_back(-1); //This line looks suspicious
     }
   }
 }
@@ -1228,6 +1230,7 @@ static void handle_rnz_start_event(
 
   ns->my_pe->pendingRnzStartMsgs[key].push_back(-1);
 
+  //Wrong! How did you get task id? it->second.front() = -1!
   Task *t = &ns->my_pe->myTasks[it->second.front()];
 
   /* Task is waiting (either MPI_Recv or MPI_Wait), send the RECV_POST message */
@@ -1684,31 +1687,31 @@ static tw_stime exec_task(
           m->model_net_calls++; 
           copyTime = 16*copy_per_byte; //Control message copy time
 
+          MsgKey key(taskEntry->node, taskEntry->msgId.id, taskEntry->msgId.comm, 
+            taskEntry->msgId.seq);
+          KeyType::iterator it = ns->my_pe->pendingRMsgs.find(key); //Just for correctness. We should not find the message!
+          /*Non-blocking or not, add the control messages to list of pendingRMsgs
+           *There is no chance that pendingRMsgs is already received, before RNZ_START is sent out*/
+          assert(it == ns->my_pe->pendingRMsgs.end());
+        
           /* Send out the control message */
           send_msg(ns, 16,
-              task_id.iter, &taskEntry->msgId, ns->my_pe->sendSeq[node]++,
+              task_id.iter, &taskEntry->msgId, taskEntry->msgId.seq,
               pe_to_lpid(node, ns->my_job), sendOffset+copyTime+nic_delay+delay, 
               RNZ_START, lp);
          
+          b->c26 = 1; // No idea what this line means. Just copied it from existing code. Check with Nikhil
+          ns->my_pe->pendingRMsgs[key].push_back(task_id.taskid);
+
           /*If non-blocking, then add request to pending requests.*/ 
           if(t->isNonBlocking) {
-            if(ns->my_pe->pendingReqs.find(t->req_id) == 
-               ns->my_pe->pendingReqs.end()) {
-              b->c25 = 1;
-              /*RDMA_Write: -1 indicates that the wait has not been enabled yet */
-              ns->my_pe->pendingReqs[t->req_id] = -1;
-            }
+            assert(ns->my_pe->pendingReqs.find(t->req_id) == 
+               ns->my_pe->pendingReqs.end());
+            b->c25 = 1;
+            /*RDMA_Write: -1 indicates that the wait has not been enabled yet */
+            ns->my_pe->pendingReqs[t->req_id] = -1;
           }
 
-          /*Non-blocking or not, add the control messages to list of pendingRMsgs
-           *There is no chance that pendingRMsgs are already received (*/
-          MsgKey key(taskEntry->node, taskEntry->msgId.id, taskEntry->msgId.comm, 
-            taskEntry->msgId.seq);
-          KeyType::iterator it = ns->my_pe->pendingRMsgs.find(key);
-          if(it == ns->my_pe->pendingRMsgs.end() || (it->second.front() != -1)) {
-            b->c26 = 1;
-            ns->my_pe->pendingRMsgs[key].push_back(task_id.taskid);
-          }
           if(!t->isNonBlocking) return 0;
           sendFinishTime += sendOffset+copyTime+nic_delay;
         }
@@ -1741,6 +1744,7 @@ static tw_stime exec_task(
           ns->my_pe->pendingReqs[t->req_id] = task_id.taskid;
         }
 
+        //Utter garbage. t->myEntry is not defined for a wait task
         MsgEntry *taskEntry = &t->myEntry;
         MsgKey key(taskEntry->node, taskEntry->msgId.id, taskEntry->msgId.comm, 
             taskEntry->msgId.seq);
@@ -1749,7 +1753,7 @@ static tw_stime exec_task(
         /* If recv_post is received, send out the data message immediately */
 
         if((it_rMsg != ns->my_pe->pendingRMsgs.end()) && (it_rMsg->second.front() == -1)) {
-          m->model_net_calls++;
+          m->model_net_calls++;              //Utter garbage. it_rMsg->second.front = -1!!!
           delegate_send_msg(ns, lp, m, b, t, it_rMsg->second.front(), 0);
           m->executed.taskid = it_rMsg->second.front();
           it_rMsg->second.pop_front();
