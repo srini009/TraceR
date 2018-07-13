@@ -1195,9 +1195,8 @@ static void handle_recv_post_event(
     delegate_send_msg(ns, lp, m, b, t, it->second.front(), 0);
     m->executed.taskid = it->second.front();
     it->second.pop_front();
-    if(it->second.size() == 0) {
-      ns->my_pe->pendingRMsgs.erase(it);
-    }
+    assert(it->second.size() == 0);
+    ns->my_pe->pendingRMsgs.erase(it);
   }
 
   else { /* Non-blocking */
@@ -1206,14 +1205,12 @@ static void handle_recv_post_event(
       delegate_send_msg(ns, lp, m, b, t, it->second.front(), 0);
       m->executed.taskid = it->second.front();
       it->second.pop_front();
-      if(it->second.size() == 0) {
-        ns->my_pe->pendingRMsgs.erase(it);
-      } 
+      assert(it->second.size() == 0);
+      ns->my_pe->pendingRMsgs.erase(it);
     } 
-    else { // store the message until the MPI_Wait is posted
+    else { /* Store the message until the MPI_Wait is posted. Replace the taskID entry at the front of the list with -1 */
       it->second.pop_front();
       assert(it->second.size() == 0);
-      //Utter garbage. Not the right way to indicate that the RECV_POST has arrived
       ns->my_pe->pendingRMsgs[key].push_back(-1); //This line looks suspicious
     }
   }
@@ -1691,7 +1688,7 @@ static tw_stime exec_task(
             taskEntry->msgId.seq);
           KeyType::iterator it = ns->my_pe->pendingRMsgs.find(key); //Just for correctness. We should not find the message!
           /*Non-blocking or not, add the control messages to list of pendingRMsgs
-           *There is no chance that pendingRMsgs is already received, before RNZ_START is sent out*/
+           *There is no chance that pendingRMsgs is already received before RNZ_START is sent out*/
           assert(it == ns->my_pe->pendingRMsgs.end());
         
           /* Send out the control message */
@@ -1736,13 +1733,12 @@ static tw_stime exec_task(
     }
 
     if(t->event_id == TRACER_SEND_COMP_EVT) {
-      std::map<int, int>::iterator it = ns->my_pe->pendingReqs.find(t->req_id);
-      /* Indicate that the wait has been posted */
-      if(it !=  ns->my_pe->pendingReqs.end()) {
-        if(it->second == -1) {
-          b->c28 = 1;
-          ns->my_pe->pendingReqs[t->req_id] = task_id.taskid;
-        }
+        std::map<int, int>::iterator it = ns->my_pe->pendingReqs.find(t->req_id);
+        /* Indicate that the wait has been posted by modifying entry in pendingReqs */
+        assert(it !=  ns->my_pe->pendingReqs.end());
+        assert(it->second == -1);
+        b->c28 = 1;
+        ns->my_pe->pendingReqs[t->req_id] = task_id.taskid;
 
         //Utter garbage. t->myEntry is not defined for a wait task
         MsgEntry *taskEntry = &t->myEntry;
