@@ -1740,28 +1740,14 @@ static tw_stime exec_task(
         b->c28 = 1;
         ns->my_pe->pendingReqs[t->req_id] = task_id.taskid;
 
-        //Utter garbage. t->myEntry is not defined for a wait task
-        MsgEntry *taskEntry = &t->myEntry;
-        MsgKey key(taskEntry->node, taskEntry->msgId.id, taskEntry->msgId.comm, 
-            taskEntry->msgId.seq);
-        KeyType::iterator it_rMsg = ns->my_pe->pendingRMsgs.find(key);
-
-        /* If recv_post is received, send out the data message immediately */
-
-        if((it_rMsg != ns->my_pe->pendingRMsgs.end()) && (it_rMsg->second.front() == -1)) {
+        if(received_recv_post_message) {
           m->model_net_calls++;              //Utter garbage. it_rMsg->second.front = -1!!!
           delegate_send_msg(ns, lp, m, b, t, it_rMsg->second.front(), 0);
           m->executed.taskid = it_rMsg->second.front();
-          it_rMsg->second.pop_front();
-
-          if(it_rMsg->second.size() == 0) {
-            ns->my_pe->pendingRMsgs.erase(it_rMsg);
-          } 
         } else {
           b->c29 = 1;
           return 0; //Wait
         } 
-      }
     }
 #endif
     
