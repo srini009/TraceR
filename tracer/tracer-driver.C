@@ -1211,7 +1211,8 @@ static void handle_recv_post_event(
     else { /* Store the message until the MPI_Wait is posted. Replace the taskID entry at the front of the list with -1 */
       it->second.pop_front();
       assert(it->second.size() == 0);
-      ns->my_pe->pendingRMsgs[key].push_back(-1); //This line looks suspicious
+      ns->my_pe->pendingRMsgs[key].push_back(-1); //This entry needs to be removed from the MPI_Wait for the MPI_Isend operation
+      ns->my_pe->pendingReceivedPostMsgs[t->req_id] = key; //This is done so that MPI_Wait is aware of the receipt of the message
     }
   }
 }
@@ -1740,7 +1741,8 @@ static tw_stime exec_task(
         b->c28 = 1;
         ns->my_pe->pendingReqs[t->req_id] = task_id.taskid;
 
-        if(received_recv_post_message) {
+        std::map<int, MsgKey>::iterator it_recv_post = ns->my_pe->pendingReceivedPostMsgs[t->req_id];
+        if(it_recv_post != ns->my_pe->pendingReceivedPostMsgs.end()) {
           m->model_net_calls++;              //Utter garbage. it_rMsg->second.front = -1!!!
           delegate_send_msg(ns, lp, m, b, t, it_rMsg->second.front(), 0);
           m->executed.taskid = it_rMsg->second.front();
