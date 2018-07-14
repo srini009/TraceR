@@ -1202,16 +1202,14 @@ static void handle_recv_post_event(
   else { /* Non-blocking */
     if(ns->my_pe->pendingReqs[t->req_id] != -1) { /*Has MPI_Wait been posted? */
       m->model_net_calls = 1;
-      delegate_send_msg(ns, lp, m, b, t, it->second.front(), 0);
-      m->executed.taskid = it->second.front();
+      delegate_send_msg(ns, lp, m, b, t, ns->my_pe->pendingReqs[t->req_id], 0);
+      m->executed.taskid = ns->my_pe->pendingReqs[t->req_id];
       it->second.pop_front();
       assert(it->second.size() == 0);
       ns->my_pe->pendingRMsgs.erase(it);
     } 
-    else { /* Store the message until the MPI_Wait is posted. Replace the taskID entry at the front of the list with -1 */
-      it->second.pop_front();
-      assert(it->second.size() == 0);
-      ns->my_pe->pendingRMsgs[key].push_back(-1); //This entry needs to be removed from the MPI_Wait for the MPI_Isend operation
+
+    else { /* Store the message until the MPI_Wait is posted*/
       ns->my_pe->pendingReceivedPostMsgs[t->req_id] = key; //This is done so that MPI_Wait is aware of the receipt of the message
     }
   }
@@ -1742,10 +1740,14 @@ static tw_stime exec_task(
         ns->my_pe->pendingReqs[t->req_id] = task_id.taskid;
 
         std::map<int, MsgKey>::iterator it_recv_post = ns->my_pe->pendingReceivedPostMsgs[t->req_id];
+
         if(it_recv_post != ns->my_pe->pendingReceivedPostMsgs.end()) {
-          m->model_net_calls++;              //Utter garbage. it_rMsg->second.front = -1!!!
-          delegate_send_msg(ns, lp, m, b, t, it_rMsg->second.front(), 0);
-          m->executed.taskid = it_rMsg->second.front();
+          m->model_net_calls++;
+          KeyType::iterator it_rMsgs = ns->my_pe->pendingRMsgs.find(it_recv_post->second());
+          assert(it_rMsgs->second.size() != 0); //Assert that we have indeed added the entry!
+          Task *t_ = &ns->my_pe->myTasks[it_rMsgs->second.front()]; //This is the MPI_Isend task
+          delegate_send_msg(ns, lp, m, b, t_, task_id.taskid, 0);
+          m->executed.taskid = task_id.taskid;
         } else {
           b->c29 = 1;
           return 0; //Wait
