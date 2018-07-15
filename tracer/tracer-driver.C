@@ -1224,22 +1224,26 @@ static void handle_rnz_start_event(
   MsgKey key(m->msgId.pe, m->msgId.id, m->msgId.comm, m->msgId.seq);
   KeyType::iterator it = ns->my_pe->pendingRnzStartMsgs.find(key);
 
-  ns->my_pe->pendingRnzStartMsgs[key].push_back(-1);
+  /* If MPI_Wait or MPI_Recv has already been posted,
+   * send out the RECV_POST */
+  if(it != ns->my_pe->pendingRnzStartMsgs().end()) {
 
-  //Wrong! How did you get task id? it->second.front() = -1!
-  Task *t = &ns->my_pe->myTasks[it->second.front()];
+    Task *t = &ns->my_pe->myTasks[it->second.front()];
 
-  /* Task is waiting (either MPI_Recv or MPI_Wait), send the RECV_POST message */
-  if((t->event_id == TRACER_RECV_COMP_EVT) || (t->event_id == TRACER_RECV_EVT)) {
-    m->model_net_calls++;
-    send_msg(ns, 16, ns->my_pe->currIter, &t->myEntry.msgId, m->msgId.seq,  
-      pe_to_lpid(t->myEntry.node, ns->my_job), nic_delay, RECV_POST, lp);
+    /* Task is waiting (either MPI_Recv or MPI_Wait), send the RECV_POST message */
+    if((t->event_id == TRACER_RECV_COMP_EVT) || (t->event_id == TRACER_RECV_EVT)) {
+      m->model_net_calls++;
+      send_msg(ns, 16, ns->my_pe->currIter, m->msgId.msgId, m->msgId.seq,  
+        pe_to_lpid(m->msgId.node, ns->my_job), nic_delay, RECV_POST, lp);
 
-    ns->my_pe->pendingRnzStartMsgs[key].pop_front();
+      ns->my_pe->pendingRnzStartMsgs[key].pop_front();
 
-    if(it->second.size() == 0) {
+      assert(it->second.size() == 0);
       ns->my_pe->pendingRnzStartMsgs.erase(it);
     }
+  } else { /* MPI_Irecv or MPI_Recv has NOT been posted */
+    assert(it->second.size() == 0);
+    ns->my_pe->pendingRnzStartMsgs[key].push_back(-1);
   }
 }
 
@@ -1429,6 +1433,8 @@ static tw_stime exec_task(
          
           assert(it_rnzStart->second.size() == 0);
           ns->my_pe->pendingRnzStartMsgs.erase(it_rnzStart);
+        } else {
+          ns->my_pe->pendingRnzStartMsgs[key].push_back(task_id.taskid); //Make a note that MPI_Recv has been posted
         }
       }
     }
@@ -1464,9 +1470,10 @@ static tw_stime exec_task(
       
           recvFinishTime += nic_delay;
          
-          if(it_rnzStart->second.size() == 0) {
-            ns->my_pe->pendingRnzStartMsgs.erase(it_rnzStart);
-          }
+          assert(it_rnzStart->second.size() == 0);
+          ns->my_pe->pendingRnzStartMsgs.erase(it_rnzStart);
+        } else {
+          ns->my_pe->pendingRnzStartMsgs[key].push_back(task_id.taskid); //Make a note that MPI_Recv has been posted
         }
       }
     
@@ -1483,8 +1490,6 @@ static tw_stime exec_task(
         b->c22 = 1;
         assert(it_pendingMsgs->second.front() == -1);
         ns->my_pe->pendingMsgs[key].pop_front();
-        
-        assert(it_pendingMsgs->second.size() == 0);
         ns->my_pe->pendingMsgs.erase(it_pendingMsgs);
       }
     }
