@@ -1379,11 +1379,9 @@ static tw_stime exec_task(
           
           ns->my_pe->pendingRnzStartMsgs[key].pop_front();
 
-          if(it->second.size() == 0) {
-            ns->my_pe->pendingRnzStartMsgs.erase(it);
-          }
+          assert(it->second.size() == 0);
+          ns->my_pe->pendingRnzStartMsgs.erase(it);
         }
-
       }
     }
 
@@ -1413,9 +1411,8 @@ static tw_stime exec_task(
         b->c22 = 1;
         assert(it->second.front() == -1);
         ns->my_pe->pendingMsgs[key].pop_front();
-        if(it->second.size() == 0) {
-          ns->my_pe->pendingMsgs.erase(it);
-        }
+        assert(it->second.size() == 0);
+        ns->my_pe->pendingMsgs.erase(it);
       }
       
       KeyType::iterator it_rnzStart = ns->my_pe->pendingRnzStartMsgs.find(key);
@@ -1430,9 +1427,8 @@ static tw_stime exec_task(
       
           recvFinishTime += nic_delay;
          
-          if(it_rnzStart->second.size() == 0) {
-            ns->my_pe->pendingRnzStartMsgs.erase(it_rnzStart);
-          }
+          assert(it_rnzStart->second.size() == 0);
+          ns->my_pe->pendingRnzStartMsgs.erase(it_rnzStart);
         }
       }
     }
@@ -1487,9 +1483,9 @@ static tw_stime exec_task(
         b->c22 = 1;
         assert(it_pendingMsgs->second.front() == -1);
         ns->my_pe->pendingMsgs[key].pop_front();
-        if(it_pendingMsgs->second.size() == 0) {
-          ns->my_pe->pendingMsgs.erase(it_pendingMsgs);
-        }
+        
+        assert(it_pendingMsgs->second.size() == 0);
+        ns->my_pe->pendingMsgs.erase(it_pendingMsgs);
       }
     }
    
