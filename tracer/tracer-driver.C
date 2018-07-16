@@ -1210,7 +1210,7 @@ static void handle_recv_post_event(
     } 
 
     else { /* Store the message until the MPI_Wait is posted*/
-      ns->my_pe->pendingReceivedPostMsgs[t->req_id] = new MsgKey (m->msgId.pe, m->msgId.id, m->msgId.comm, m->msgId.seq); //This is done so that MPI_Wait is aware of the receipt of the message
+      ns->my_pe->pendingReceivedPostMsgs[t->req_id].push_back(key); //This is done so that MPI_Wait is aware of the receipt of the message
     }
   }
 }
@@ -1740,11 +1740,11 @@ static tw_stime exec_task(
         b->c28 = 1;
         ns->my_pe->pendingReqs[t->req_id] = task_id.taskid;
 
-        std::map<int, MsgKey>::iterator it_recv_post = ns->my_pe->pendingReceivedPostMsgs.find(t->req_id);
+        std::map<int, std::list < MsgKey > >::iterator it_recv_post = ns->my_pe->pendingReceivedPostMsgs.find(t->req_id);
 
         if(it_recv_post != ns->my_pe->pendingReceivedPostMsgs.end()) {
           m->model_net_calls++;
-          KeyType::iterator it_rMsgs = ns->my_pe->pendingRMsgs.find(it_recv_post->second);
+          KeyType::iterator it_rMsgs = ns->my_pe->pendingRMsgs.find(it_recv_post->second.front());
           assert(it_rMsgs->second.size() != 0); //Assert that we have indeed added the entry!
           Task *t_ = &ns->my_pe->myTasks[it_rMsgs->second.front()]; //This is the MPI_Isend task
           delegate_send_msg(ns, lp, m, b, t_, task_id.taskid, 0);

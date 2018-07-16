@@ -100,7 +100,7 @@ class PE {
     int64_t *sendSeq, *recvSeq;
     std::map<int, int> pendingReqs;
     std::map<int, int64_t> pendingRReqs;
-    std::map<int, MsgKey> pendingReceivedPostMsgs;
+    std::map<int, std::list< MsgKey > > pendingReceivedPostMsgs;
 
     //handling collectives
     std::vector<int64_t> collectiveSeq;

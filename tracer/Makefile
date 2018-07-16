@@ -27,10 +27,10 @@ all: traceR
 .PHONY: components
 
 traceR: tracer-driver.o components
-	$(CXX) ${LDFLAGS} $< -o $@ ${TRACER_LDADD}
+	$(CXX) ${LDFLAGS} -w $< -o $@ ${TRACER_LDADD}
 
 tracer-driver.o: tracer-driver.C tracer-driver.h
-	$(CXX) $(CFLAGS) ${BASE_INCS} $(TRACER_CFLAGS) -c $< -o $@
+	$(CXX) $(CFLAGS) -w ${BASE_INCS} $(TRACER_CFLAGS) -c $< -o $@
 
 components:
 	cd bigsim; make;
