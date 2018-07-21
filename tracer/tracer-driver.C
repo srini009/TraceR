@@ -1250,7 +1250,6 @@ static void handle_recv_post_event(
   MsgKey key(m->msgId.pe, m->msgId.id, m->msgId.comm, m->msgId.seq);
   KeyType::iterator it = ns->my_pe->pendingRMsgs.find(key);
   
-  b->c2 = 1;
   assert(it->second.size() != 0); //Assert that we have indeed added the entry!
   Task *t = &ns->my_pe->myTasks[it->second.front()];
 
@@ -1462,7 +1461,6 @@ static tw_stime exec_task(
      * 4. If the message is rendezvous, and the data message has not arrived yet, then perform tasks the same tasks 2-3 as in MPI_Irecv
      * 5. Wait */
     if (t->event_id == TRACER_RECV_EVT && !PE_noMsgDep(ns->my_pe, task_id.iter, task_id.taskid)) {
-      b->c7 = 1;
       seq = ns->my_pe->recvSeq[t->myEntry.node];
 
       MsgKey key(t->myEntry.node, t->myEntry.msgId.id, t->myEntry.msgId.comm, seq);
@@ -1474,10 +1472,8 @@ static tw_stime exec_task(
       if(it == ns->my_pe->pendingMsgs.end()) {
         assert(PE_is_busy(ns->my_pe) == false);
         ns->my_pe->pendingMsgs[key].push_back(task_id.taskid);
-        b->c21 = 1;
         regular_receive_and_not_received_message = true;
       } else { /*Message is available. Take it!*/
-        b->c22 = 1;
         assert(it->second.front() == -1);
         ns->my_pe->pendingMsgs[key].pop_front();
         assert(it->second.size() == 0);
@@ -1512,7 +1508,6 @@ static tw_stime exec_task(
      * 4. Wait */
     if(t->event_id == TRACER_RECV_COMP_EVT 
        && !PE_noMsgDep(ns->my_pe, task_id.iter, task_id.taskid)) {
-      b->c7 = 1;
 
       /*Assert that the receive has indeed been posted for the MPI_Wait, and remove it from list of pending receive requests. Let this be.*/
       std::map<int, int64_t>::iterator it = ns->my_pe->pendingRReqs.find(t->req_id);
@@ -1549,10 +1544,8 @@ static tw_stime exec_task(
       if(it_pendingMsgs == ns->my_pe->pendingMsgs.end()) {
         assert(PE_is_busy(ns->my_pe) == false);
         ns->my_pe->pendingMsgs[key].push_back(task_id.taskid);
-        b->c21 = 1;
         return 0;
       } else { /*Message is available. Take it!*/
-        b->c22 = 1;
         assert(it_pendingMsgs->second.front() == -1);
         ns->my_pe->pendingMsgs[key].pop_front();
         ns->my_pe->pendingMsgs.erase(it_pendingMsgs);
@@ -1710,7 +1703,6 @@ static tw_stime exec_task(
 
     /* Triggered with MPI_Send or MPI_Isend */
     if(t->event_id == TRACER_SEND_EVT) {
-      b->c23 = 1;
       MsgEntry *taskEntry = &t->myEntry;
       bool isCopying = true;
       tw_stime copyTime = copy_per_byte * MsgEntry_getSize(taskEntry);
@@ -1738,7 +1730,6 @@ static tw_stime exec_task(
           sendFinishTime = sendOffset+copyTime;
         } else {
           /* Rendezvous */
-          b->c24 = 1;
           taskEntry->msgId.seq = ns->my_pe->sendSeq[node]++;
 
           /*RDMA_Write: Sender does NOT transfer data right away. 
@@ -1762,14 +1753,12 @@ static tw_stime exec_task(
               pe_to_lpid(node, ns->my_job), sendOffset+copyTime+nic_delay+delay, 
               RNZ_START, lp);
          
-          b->c26 = 1; // No idea what this line means. Just copied it from existing code. Check with Nikhil
           ns->my_pe->pendingRMsgs[key].push_back(task_id.taskid);
 
           /*If non-blocking, then add request to pending requests.*/ 
           if(t->isNonBlocking) {
             assert(ns->my_pe->pendingReqs.find(t->req_id) == 
                ns->my_pe->pendingReqs.end());
-            b->c25 = 1;
             /*RDMA_Write: -1 indicates that the wait has not been enabled yet */
             ns->my_pe->pendingReqs[t->req_id] = -1;
           }
@@ -1802,7 +1791,6 @@ static tw_stime exec_task(
         /* Indicate that the wait has been posted by modifying entry in pendingReqs */
         assert(it !=  ns->my_pe->pendingReqs.end());
         assert(it->second == -1);
-        b->c28 = 1;
         ns->my_pe->pendingReqs[t->req_id] = task_id.taskid;
 
         std::map<int, std::list < MsgKey > >::iterator it_recv_post = ns->my_pe->pendingReceivedPostMsgs.find(t->req_id);
@@ -1815,7 +1803,6 @@ static tw_stime exec_task(
           delegate_send_msg(ns, lp, m, b, t_, task_id.taskid, 0);
           m->executed.taskid = task_id.taskid;
         } else {
-          b->c29 = 1;
           return 0; //Wait
         } 
     }
