@@ -241,17 +241,6 @@ int main(int argc, char **argv)
                 "slimfly_router", NULL, 1);
     }
 
-    if(net_id == EXPRESS_MESH) {
-        num_nics = codes_mapping_get_lp_count("MODELNET_GRP", 0,
-                "modelnet_express_mesh", NULL, 1);
-        num_routers = codes_mapping_get_lp_count("MODELNET_GRP", 0,
-                "modelnet_express_mesh_router", NULL, 1);
-        num_nics_per_rep = codes_mapping_get_lp_count("MODELNET_GRP", 1,
-                "modelnet_express_mesh", NULL, 1);
-        num_routers_per_rep = codes_mapping_get_lp_count("MODELNET_GRP", 1,
-                "modelnet_express_mesh_router", NULL, 1);
-    }
-
     num_servers_per_rep = codes_mapping_get_lp_count("MODELNET_GRP", 1,
         "server", NULL, 1);
 
