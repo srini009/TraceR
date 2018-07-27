@@ -1306,7 +1306,6 @@ static void handle_rnz_start_event(
       ns->my_pe->pendingRnzStartMsgs.erase(it);
     }
   } else { /* MPI_Irecv or MPI_Recv has NOT been posted */
-    assert(it->second.size() == 0);
     ns->my_pe->pendingRnzStartMsgs[key].push_back(-1);
   }
 }
