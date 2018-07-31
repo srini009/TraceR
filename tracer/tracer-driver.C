@@ -482,7 +482,6 @@ int main(int argc, char **argv)
     }
 #endif
 
-
     tw_run();
 
     if(lp_io_flush(handle, MPI_COMM_WORLD) < 0)
@@ -568,6 +567,18 @@ static void proc_init(
     e = codes_event_new(lp->gid, kickoff_time, lp);
     m =  (proc_msg*)tw_event_data(e);
     m->proc_event_type = KICKOFF;
+#ifdef TRACER_RDMA_DEBUG
+  fprintf(stderr, "RDMA_DEBUG: Total number of tasks for PE %d is : %d\n", ns->my_pe_num, ns->my_pe->tasksCount);
+   int count_ = 0;
+    for(int k=0; k < ns->my_pe->tasksCount; k++) {
+      Task *t = &ns->my_pe->myTasks[k];
+      if(t->event_id == TRACER_RECV_COMP_EVT) {
+        count_++;
+      }
+    }
+  fprintf(stderr, "RDMA_DEBUG: Total number of TRACER_RECV_COMP_EVT tasks for PE %d is : %d\n", ns->my_pe_num, count_);
+
+#endif
     tw_event_send(e);
 
     return;
@@ -870,13 +881,25 @@ static void handle_recv_event(
 #endif
     MsgKey key(m->msgId.pe, m->msgId.id, m->msgId.comm, m->msgId.seq);
     KeyType::iterator it = ns->my_pe->pendingMsgs.find(key);
+
+#ifdef TRACER_RDMA_DEBUG
+  fprintf(stderr, "RDMA_DEBUG: Task %d received a data message from %d\n", ns->my_pe_num, m->msgId.pe);
+#endif
     assert((it == ns->my_pe->pendingMsgs.end()) || (it->second.size() != 0));
     if(it == ns->my_pe->pendingMsgs.end() || it->second.front() == -1) {
+
+#ifdef TRACER_RDMA_DEBUG
+  fprintf(stderr, "RDMA_DEBUG: Task %d has received message and hasn't posted an MPI_Wait or MPI_Recv yet\n", ns->my_pe_num);
+#endif
       task_id = -1;
       ns->my_pe->pendingMsgs[key].push_back(task_id);
       b->c2 = 1;
       return;
     } else {
+
+#ifdef TRACER_RDMA_DEBUG
+  fprintf(stderr, "RDMA_DEBUG: Task %d has received message and has posted an MPI_Wait or MPI_Recv yet\n", ns->my_pe_num);
+#endif
       b->c3 = 1;
       task_id = it->second.front();
       it->second.pop_front();
@@ -1292,6 +1315,10 @@ static void handle_rnz_start_event(
    * send out the RECV_POST */
   if(it != ns->my_pe->pendingRnzStartMsgs.end()) {
 
+#ifdef TRACER_RDMA_DEBUG
+  fprintf(stderr, "RDMA_DEBUG: Task %d has received an RNZ_START message and MPI_Irecv or MPI_Recv has been posted\n", ns->my_pe_num);
+#endif
+
     Task *t = &ns->my_pe->myTasks[it->second.front()];
 
     /* Task is waiting (either MPI_Recv or MPI_Wait), send the RECV_POST message */
@@ -1306,6 +1333,10 @@ static void handle_rnz_start_event(
       ns->my_pe->pendingRnzStartMsgs.erase(it);
     }
   } else { /* MPI_Irecv or MPI_Recv has NOT been posted */
+
+#ifdef TRACER_RDMA_DEBUG
+  fprintf(stderr, "RDMA_DEBUG: Task %d has received an RNZ_START message and hasn't posted an MPI_Irecv or MPI_Recv yet\n", ns->my_pe_num);
+#endif
     ns->my_pe->pendingRnzStartMsgs[key].push_back(-1);
   }
 }
@@ -1436,6 +1467,10 @@ static tw_stime exec_task(
 
       if(is_message_rendezvous) { 
         if(it != ns->my_pe->pendingRnzStartMsgs.end()) {
+
+#ifdef TRACER_RDMA_DEBUG
+  fprintf(stderr, "RDMA_DEBUG: Task %d has received an RNZ_START message inside MPI_Irecv and is responding with RECV_POST\n", ns->my_pe_num);
+#endif
           assert(it->second.front() == -1);
           m->model_net_calls++;
 
@@ -1482,6 +1517,9 @@ static tw_stime exec_task(
       KeyType::iterator it_rnzStart = ns->my_pe->pendingRnzStartMsgs.find(key);
       if(is_message_rendezvous && regular_receive_and_not_received_message) {
         if(it_rnzStart != ns->my_pe->pendingRnzStartMsgs.end()) {
+#ifdef TRACER_RDMA_DEBUG
+  fprintf(stderr, "RDMA_DEBUG: Task %d has received an RNZ_START message inside MPI_Recv and is responding with RECV_POST\n", ns->my_pe_num);
+#endif
           assert(it_rnzStart->second.front() == -1);
           ns->my_pe->pendingRnzStartMsgs[key].pop_front();
 
