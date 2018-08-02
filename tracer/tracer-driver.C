@@ -1272,7 +1272,10 @@ static void handle_recv_post_event(
 {
   MsgKey key(m->msgId.pe, m->msgId.id, m->msgId.comm, m->msgId.seq);
   KeyType::iterator it = ns->my_pe->pendingRMsgs.find(key);
-  
+ 
+  #ifdef TRACER_RDMA_DEBUG 
+  fprintf(stderr, "RDMA_DEBUG: PE: %d Number of items in pendingRMsgs array: %d with key elements %d, %d, %d\n", ns->my_pe_num, it->second.size(), m->msgId.pe, m->msgId.id, m->msgId.seq);
+  #endif
   assert(it->second.size() != 0); //Assert that we have indeed added the entry!
   Task *t = &ns->my_pe->myTasks[it->second.front()];
 
@@ -1288,6 +1291,9 @@ static void handle_recv_post_event(
 
   else { /* Non-blocking */
     if(ns->my_pe->pendingReqs[t->req_id] != -1) { /*Has MPI_Wait been posted? */
+      #ifdef TRACER_RDMA_DEBUG 
+      fprintf(stderr, "RDMA_DEBUG: PE: %d RECV_POST message received after MPI_Wait was posted\n", ns->my_pe_num);
+      #endif
       m->model_net_calls = 1;
       delegate_send_msg(ns, lp, m, b, t, ns->my_pe->pendingReqs[t->req_id], 0);
       m->executed.taskid = ns->my_pe->pendingReqs[t->req_id];
@@ -1297,6 +1303,9 @@ static void handle_recv_post_event(
     } 
 
     else { /* Store the message until the MPI_Wait is posted*/
+      #ifdef TRACER_RDMA_DEBUG 
+      fprintf(stderr, "RDMA_DEBUG: PE: %d RECV_POST message received before MPI_Wait was posted\n", ns->my_pe_num);
+      #endif
       ns->my_pe->pendingReceivedPostMsgs[t->req_id].push_back(key); //This is done so that MPI_Wait is aware of the receipt of the message
     }
   }
@@ -1316,7 +1325,7 @@ static void handle_rnz_start_event(
   if(it != ns->my_pe->pendingRnzStartMsgs.end()) {
 
 #ifdef TRACER_RDMA_DEBUG
-  fprintf(stderr, "RDMA_DEBUG: Task %d has received an RNZ_START message and MPI_Irecv or MPI_Recv has been posted\n", ns->my_pe_num);
+  fprintf(stderr, "RDMA_DEBUG: Task %d has received an RNZ_START message with key:%d, %d, and %d and MPI_Irecv or MPI_Recv has been posted\n", ns->my_pe_num, m->msgId.pe, m->msgId.id, m->msgId.seq);
 #endif
 
     Task *t = &ns->my_pe->myTasks[it->second.front()];
@@ -1324,7 +1333,16 @@ static void handle_rnz_start_event(
     /* Task is waiting (either MPI_Recv or MPI_Wait), send the RECV_POST message */
     if((t->event_id == TRACER_RECV_COMP_EVT) || (t->event_id == TRACER_RECV_EVT)) {
       m->model_net_calls++;
-      send_msg(ns, 16, ns->my_pe->currIter, &m->msgId, m->msgId.seq,  
+      //This line looks suspect as hell
+      MsgID recv_post_msg;
+
+      recv_post_msg.size = 16;
+      recv_post_msg.pe = ns->my_pe_num;
+      recv_post_msg.id = m->msgId.id;
+      recv_post_msg.comm = m->msgId.comm;
+      recv_post_msg.seq = m->msgId.seq;
+
+      send_msg(ns, 16, ns->my_pe->currIter, &recv_post_msg, recv_post_msg.seq,  
         pe_to_lpid(m->msgId.pe, ns->my_job), nic_delay, RECV_POST, lp);
 
       ns->my_pe->pendingRnzStartMsgs[key].pop_front();
@@ -1782,14 +1800,20 @@ static tw_stime exec_task(
           KeyType::iterator it = ns->my_pe->pendingRMsgs.find(key); //Just for correctness. We should not find the message!
           /*Non-blocking or not, add the control messages to list of pendingRMsgs
            *There is no chance that pendingRMsgs is already received before RNZ_START is sent out*/
-          assert(it == ns->my_pe->pendingRMsgs.end());
+          #ifdef TRACER_RDMA_DEBUG
+          fprintf(stderr, "RDMA_DEBUG: PE: %d Asserting that the RECV_POST is not received before RNZ_START is sent - key elements: %d, %d, %d and pendingRMsgs size: %d\n", ns->my_pe_num, taskEntry->node, taskEntry->msgId.id, taskEntry->msgId.seq, ns->my_pe->pendingRMsgs.size());
+          #endif
+          assert(ns->my_pe->pendingRMsgs[key].size() == 0);
         
           /* Send out the control message */
           send_msg(ns, 16,
               task_id.iter, &taskEntry->msgId, taskEntry->msgId.seq,
               pe_to_lpid(node, ns->my_job), sendOffset+copyTime+nic_delay+delay, 
               RNZ_START, lp);
-         
+        
+          #ifdef TRACER_RDMA_DEBUG
+          fprintf(stderr, "RDMA_DEBUG: PE: %d Pushing back task ID: %d with key elements %d, %d, %d\n", ns->my_pe_num, task_id.taskid, taskEntry->node, taskEntry->msgId.id, taskEntry->msgId.seq); 
+          #endif
           ns->my_pe->pendingRMsgs[key].push_back(task_id.taskid);
 
           /*If non-blocking, then add request to pending requests.*/ 
@@ -1834,11 +1858,22 @@ static tw_stime exec_task(
 
         if(it_recv_post != ns->my_pe->pendingReceivedPostMsgs.end()) {
           m->model_net_calls++;
+          #ifdef TRACER_RDMA_DEBUG
+          fprintf(stderr, "RDMA_DEBUG: PE: %d In MPI_Wait for MPI_Isend. Now sending data...\n", ns->my_pe_num); 
+          #endif
           KeyType::iterator it_rMsgs = ns->my_pe->pendingRMsgs.find(it_recv_post->second.front());
           assert(it_rMsgs->second.size() != 0); //Assert that we have indeed added the entry!
           Task *t_ = &ns->my_pe->myTasks[it_rMsgs->second.front()]; //This is the MPI_Isend task
           delegate_send_msg(ns, lp, m, b, t_, task_id.taskid, 0);
           m->executed.taskid = task_id.taskid;
+
+          it_rMsgs->second.pop_front();
+          assert(it_rMsgs->second.size() == 0);
+          ns->my_pe->pendingRMsgs.erase(it_rMsgs);
+
+          it_recv_post->second.pop_front();
+          assert(it_recv_post->second.size() == 0);
+          ns->my_pe->pendingReceivedPostMsgs.erase(it_recv_post);
         } else {
           return 0; //Wait
         } 
