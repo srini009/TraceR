@@ -95,7 +95,7 @@ main(int argc, char **argv) {
 
 	if(my_rank == 1) {
 	//Send
-                compute(WAIT_TIME*2);
+                compute(WAIT_TIME);
 		MPI_Isend(buffer, DATA_SIZE, MPI_INT, 0, 123, MPI_COMM_WORLD, &req);
 		compute(COMPUTE_TIME);
 		MPI_Wait(&req, &stat);
