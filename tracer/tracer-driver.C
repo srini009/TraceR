@@ -888,7 +888,7 @@ static void handle_recv_event(
     assert((it == ns->my_pe->pendingMsgs.end()) || (it->second.size() != 0));
     if(it == ns->my_pe->pendingMsgs.end() || it->second.front() == -1) {
 
-#ifdef TRACER_RDMA_DEBUG
+#ifdef TRACER_RDMA_DEBUG_CRITICAL
   fprintf(stderr, "RDMA_DEBUG: Task %d has received message and hasn't posted an MPI_Wait or MPI_Recv yet\n", ns->my_pe_num);
 #endif
       task_id = -1;
@@ -897,8 +897,8 @@ static void handle_recv_event(
       return;
     } else {
 
-#ifdef TRACER_RDMA_DEBUG
-  fprintf(stderr, "RDMA_DEBUG: Task %d has received message and has posted an MPI_Wait or MPI_Recv yet\n", ns->my_pe_num);
+#ifdef TRACER_RDMA_DEBUG_CRITICAL
+  fprintf(stderr, "RDMA_DEBUG: Message delivered to task %d\n", ns->my_pe_num);
 #endif
       b->c3 = 1;
       task_id = it->second.front();
@@ -1287,6 +1287,9 @@ static void handle_recv_post_event(
     it->second.pop_front();
     assert(it->second.size() == 0);
     ns->my_pe->pendingRMsgs.erase(it);
+    #ifdef TRACER_RDMA_DEBUG_CRITICAL
+    fprintf(stderr, "RDMA_DEBUG: PE: %d Has completed a blocking send\n", ns->my_pe_num);
+    #endif
   }
 
   else { /* Non-blocking */
@@ -1333,7 +1336,6 @@ static void handle_rnz_start_event(
     /* Task is waiting (either MPI_Recv or MPI_Wait), send the RECV_POST message */
     if((t->event_id == TRACER_RECV_COMP_EVT) || (t->event_id == TRACER_RECV_EVT)) {
       m->model_net_calls++;
-      //This line looks suspect as hell
       MsgID recv_post_msg;
 
       recv_post_msg.size = 16;
@@ -1352,7 +1354,7 @@ static void handle_rnz_start_event(
     }
   } else { /* MPI_Irecv or MPI_Recv has NOT been posted */
 
-#ifdef TRACER_RDMA_DEBUG
+#ifdef TRACER_RDMA_DEBUG_CRITICAL
   fprintf(stderr, "RDMA_DEBUG: Task %d has received an RNZ_START message and hasn't posted an MPI_Irecv or MPI_Recv yet\n", ns->my_pe_num);
 #endif
     ns->my_pe->pendingRnzStartMsgs[key].push_back(-1);
@@ -1601,6 +1603,10 @@ static tw_stime exec_task(
         ns->my_pe->pendingMsgs[key].push_back(task_id.taskid);
         return 0;
       } else { /*Message is available. Take it!*/
+  
+        #ifdef TRACER_RDMA_DEBUG_CRITICAL
+        fprintf(stderr, "RDMA_DEBUG: Message delivered to %d\n", ns->my_pe_num);
+          #endif
         assert(it_pendingMsgs->second.front() == -1);
         ns->my_pe->pendingMsgs[key].pop_front();
         ns->my_pe->pendingMsgs.erase(it_pendingMsgs);
