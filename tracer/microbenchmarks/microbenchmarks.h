@@ -1,4 +1,4 @@
-#define NUM_ITERS 10
+#define NUM_ITERS 1
 #define DIM 25
 
 #define COMPUTE_TIME 0.06
