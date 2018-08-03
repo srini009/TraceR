@@ -1,6 +1,11 @@
 #include<stdio.h>
+#include<stdlib.h>
 #include<mpi.h>
 #include "microbenchmarks.h"
+
+#if WRITE_OTF2_TRACE
+#include <scorep/SCOREP_User.h>
+#endif
 
 static float **a = NULL, *x = NULL, *y = NULL;
 
@@ -79,6 +84,10 @@ main(int argc, char **argv) {
 
 	starttime = MPI_Wtime();
 
+#if WRITE_OTF2_TRACE
+  SCOREP_RECORDING_ON();
+#endif
+	MPI_Barrier(MPI_COMM_WORLD);
 	for(i=0; i < NUM_ITERS; i++) {
 
 	if(my_rank == 1) {
@@ -101,6 +110,9 @@ main(int argc, char **argv) {
 	}
 
 	MPI_Barrier(MPI_COMM_WORLD);
+#if WRITE_OTF2_TRACE
+  SCOREP_RECORDING_OFF();
+#endif
 	endtime = MPI_Wtime();
 
 	if(my_rank == 0) printf("Done in %f seconds.\n", endtime - starttime);

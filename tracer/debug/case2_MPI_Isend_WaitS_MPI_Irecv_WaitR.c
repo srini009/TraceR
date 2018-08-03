@@ -1,4 +1,6 @@
 #include<stdio.h>
+#include<stdlib.h>
+
 #include<mpi.h>
 
 #if WRITE_OTF2_TRACE
