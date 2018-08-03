@@ -1,0 +1,76 @@
+##############################################################################
+# Copyright (c) 2015, Lawrence Livermore National Security, LLC.
+# Produced at the Lawrence Livermore National Laboratory.
+#
+# Written by:
+#     Nikhil Jain <nikhil.jain@acm.org>
+#     Bilge Acun <acun2@illinois.edu>
+#     Abhinav Bhatele <bhatele@llnl.gov>
+#
+# LLNL-CODE-740483. All rights reserved.
+#
+# This file is part of TraceR. For details, see:
+# https://github.com/LLNL/TraceR
+# Please also read the LICENSE file for the MIT License notice.
+##############################################################################
+
+ifeq ($(ARCH),bgq)
+CC = mpixlc_r
+CXX = mpixlcxx_r
+else ifeq ($(ARCH),cray)
+CC = cc -std=gnu99
+CXX = CC
+else
+CC = mpicc -std=gnu99
+CXX = mpicxx
+endif
+
+SEQ_CXX = ${CXX}
+
+#needed if using bigsim logs
+#CHARMPATH = /p/lscratchf/jain6/network-sim/charm/verbs-linux-x86_64-bigemulator-icc
+CHARMPATH = /p/lscratchf/jain6/network-sim/charm/mpi-linux-x86_64-bigemulator
+
+#ross install directory
+ROSS = /home/sramesh/NONBLOCKING_EXPERIMENTS/ROSS
+#base directory of this code
+BASE_DIR = /home/sramesh/NONBLOCKING_EXPERIMENTS
+CODES = ${BASE_DIR}/CODES
+CODES_LIBS = -L${CODES}/lib -Wl,-rpath=${CODES}/lib
+CODES_LIBS += -L${ROSS}/lib -Wl,-rpath=${ROSS}/lib
+CODES_LIBS += -lcodes -lROSS -lm
+
+ifeq ($(ARCH),bgq)
+ARCH_FLAGS = -I/bgsys/drivers/ppcfloor
+else
+ARCH_FLAGS = -Wall 
+endif
+
+CODES_CFLAGS = -I${CODES}/include -I${ROSS}/include
+#Enable one of the following:
+#SELECT_TRACE = -DTRACER_BIGSIM_TRACES=1
+SELECT_TRACE = -DTRACER_OTF_TRACES=1
+
+#CFLAGS = -O2 -g -Wall -DNO_COMM_BUILD=1
+#CXXFLAGS = -O2 -g -Wall -DNO_COMM_BUILD=1
+CFLAGS = -O2 -g -Wall -DDEBUG_PRINT
+CXXFLAGS = -O2 -g -Wall 
+LDFLAGS = -g
+OPTS = ${CXXFLAGS} ${ARCH_FLAGS} ${CODES_CFLAGS} ${SELECT_TRACE}
+BASE_INCS= -Ibigsim -I.
+
+ifeq ($(SELECT_TRACE),-DTRACER_BIGSIM_TRACES=1)
+CHARM_LIBS = -L$(CHARMPATH)/lib
+CHARM_LIBS += -lconv-bigsim-logs -lblue-standalone -lconv-util
+OPTS += -I$(CHARMPATH)/include
+endif
+
+ifeq ($(SELECT_TRACE),-DTRACER_OTF_TRACES=1)
+CFLAGS += `otf2-config --cflags`
+CXXFLAGS += `otf2-config --cflags`
+LDFLAGS += `otf2-config --ldflags`
+OTF_LIBS = `otf2-config --libs`
+OPTS += `otf2-config --cflags`
+SEQ_CXX = ${CXX}
+endif
+
