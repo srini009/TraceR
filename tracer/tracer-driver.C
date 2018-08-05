@@ -1325,7 +1325,10 @@ static void handle_rnz_start_event(
 {
   MsgKey key(m->msgId.pe, m->msgId.id, m->msgId.comm, m->msgId.seq);
   KeyType::iterator it = ns->my_pe->pendingRnzStartMsgs.find(key);
-
+  Task *curr_t = &ns->my_pe->myTasks[ns->my_pe->currentTask]; //Get the current task - think about what happens when we are inside
+						  // inside an MPI_Wait for MPI_Isend when this message arrives, and the 
+						  // MPI_Wait for the MPI_Irecv is after the MPI_Wait for MPI_Isend
+						  // In such a situation, we need to ensure progress.
   /* If MPI_Wait or MPI_Recv has already been posted,
    * send out the RECV_POST */
   if(it != ns->my_pe->pendingRnzStartMsgs.end()) {
@@ -1335,7 +1338,7 @@ static void handle_rnz_start_event(
     /* Task is waiting (either MPI_Recv or MPI_Wait), send the RECV_POST message */
     if((t->event_id == TRACER_RECV_COMP_EVT) || (t->event_id == TRACER_RECV_EVT)) {
 #ifdef TRACER_RDMA_DEBUG
-  fprintf(stderr, "RDMA_DEBUG: Task %d has received an RNZ_START message after MPI_Recv or MPI_Wait has been posted\n", ns->my_pe_num);
+  fprintf(stderr, "RDMA_DEBUG: Task %d has received an RNZ_START message after MPI_Recv or MPI_Wait for MPI_Irecv has been posted\n", ns->my_pe_num);
 #endif
       m->model_net_calls++;
       MsgID recv_post_msg;
@@ -1355,9 +1358,28 @@ static void handle_rnz_start_event(
       ns->my_pe->pendingRnzStartMsgs.erase(it);
       //Suspect code: What happens to this task? How does the system know that the task was completed?
     }
-  } else { /* MPI_Irecv or MPI_Recv has NOT been posted */
+  } else if (curr_t->event_id == TRACER_SEND_COMP_EVT) {
+
+#ifdef TRACER_RDMA_DEBUG
+  fprintf(stderr, "RDMA_DEBUG: Task %d has received an RNZ_START message after MPI_Recv or MPI_Wait for SOME MPI_Isend has been posted\n", ns->my_pe_num);
+#endif
+
+      MsgID recv_post_msg;
+
+      recv_post_msg.size = 16;
+      recv_post_msg.pe = ns->my_pe_num;
+      recv_post_msg.id = m->msgId.id;
+      recv_post_msg.comm = m->msgId.comm;
+      recv_post_msg.seq = m->msgId.seq;
+
+      send_msg(ns, 16, ns->my_pe->currIter, &recv_post_msg, recv_post_msg.seq,  
+        pe_to_lpid(m->msgId.pe, ns->my_job), nic_delay, RECV_POST, lp);
+    
+      ns->my_pe->pendingRnzStartMsgs[key].push_back(-2); //Indicate this was received in "SOME" Wait
+
+  } else { /* MPI_Wait or MPI_Recv has NOT been posted */
 #ifdef TRACER_RDMA_DEBUG_CRITICAL
-  fprintf(stderr, "RDMA_DEBUG: Task %d has received an RNZ_START message and hasn't posted an MPI_Wait or MPI_Recv yet\n", ns->my_pe_num);
+  fprintf(stderr, "RDMA_DEBUG: Task %d has received an RNZ_START message before a Wait has been posted \n", ns->my_pe_num);
 #endif
     ns->my_pe->pendingRnzStartMsgs[key].push_back(-1);
   }
@@ -1588,15 +1610,21 @@ static tw_stime exec_task(
 
       if(is_message_rendezvous) {
         if(it_rnzStart != ns->my_pe->pendingRnzStartMsgs.end()) {
-          assert(it_rnzStart->second.front() == -1);
-          ns->my_pe->pendingRnzStartMsgs[key_rnzStart].pop_front();
+          assert(it_rnzStart->second.front() <= -1);
 
-          m->model_net_calls++;
-          send_msg(ns, 16, ns->my_pe->currIter, &t->myEntry.msgId, seq,  
-           pe_to_lpid(t->myEntry.node, ns->my_job), nic_delay, RECV_POST, lp);
-      
-          recvFinishTime += nic_delay;
-         
+          if(it_rnzStart->second.front() == -1) {
+
+          #ifdef TRACER_RDMA_DEBUG
+          fprintf(stderr, "RDMA_DEBUG: Task %d Sending a RECV_POST back..\n", ns->my_pe_num);
+          #endif
+            m->model_net_calls++;
+            send_msg(ns, 16, ns->my_pe->currIter, &t->myEntry.msgId, seq,  
+            pe_to_lpid(t->myEntry.node, ns->my_job), nic_delay*10, RECV_POST, lp);
+        
+            recvFinishTime += nic_delay;
+          }
+
+          ns->my_pe->pendingRnzStartMsgs[key_rnzStart].pop_front();
           assert(it_rnzStart->second.size() == 0);
           ns->my_pe->pendingRnzStartMsgs.erase(it_rnzStart);
         } else {
