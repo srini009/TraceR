@@ -568,6 +568,8 @@ static void proc_init(
     m =  (proc_msg*)tw_event_data(e);
     m->proc_event_type = KICKOFF;
 #ifdef TRACER_RDMA_DEBUG
+  fprintf(stderr, "RDMA_DEBUG: Kickoff time %lf\n", kickoff_time);
+
   fprintf(stderr, "RDMA_DEBUG: Total number of tasks for PE %d is : %d\n", ns->my_pe_num, ns->my_pe->tasksCount);
    int count_r = 0, count_s = 0;
     for(int k=0; k < ns->my_pe->tasksCount; k++) {
@@ -1445,6 +1447,10 @@ static tw_stime exec_task(
       b->c10 = 1;
       return 0;
     }
+#ifdef TRACER_RDMA_DEBUG
+  fprintf(stderr, "Task %d Exec task id: %d and event id %d invoked at: %lf\n", ns->my_pe_num, task_id.taskid, (ns->my_pe->myTasks[task_id.taskid]).event_id, tw_now(lp));
+#endif
+
     //Check if the backward dependencies are satisfied
     //If not, do nothing yet
     //If yes, execute the task
@@ -1841,7 +1847,6 @@ static tw_stime exec_task(
            *More importantly, no data is transferred inside MPI_Isend */
           m->model_net_calls++; 
           copyTime = 16*copy_per_byte; //Control message copy time
-
           MsgKey key(taskEntry->node, taskEntry->msgId.id, taskEntry->msgId.comm, 
             taskEntry->msgId.seq);
           KeyType::iterator it = ns->my_pe->pendingRMsgs.find(key); //Just for correctness. We should not find the message!

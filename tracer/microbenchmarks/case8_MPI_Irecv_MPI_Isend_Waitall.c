@@ -89,8 +89,8 @@ main(int argc, char **argv) {
 
 #if WRITE_OTF2_TRACE
   SCOREP_RECORDING_ON();
+  MPI_Barrier(MPI_COMM_WORLD);
 #endif
-        MPI_Barrier(MPI_COMM_WORLD);
 	for(i=0; i < NUM_ITERS; i++) {
 
            compute(WAIT_TIME);
@@ -111,7 +111,6 @@ main(int argc, char **argv) {
 	  MPI_Barrier(MPI_COMM_WORLD);
 	}
 
-	MPI_Barrier(MPI_COMM_WORLD);
 #if WRITE_OTF2_TRACE
     SCOREP_RECORDING_OFF();
 #endif
