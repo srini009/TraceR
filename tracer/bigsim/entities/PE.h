@@ -31,6 +31,9 @@ class MsgKey {
   public:
   uint32_t rank, comm, tag;
   int64_t seq;
+  MsgKey() {
+    rank = 0; tag = 0; comm = 0; seq = 0;
+  }
   MsgKey(uint32_t _rank, uint32_t _tag, uint32_t _comm, int64_t _seq) {
     rank = _rank; tag = _tag; comm = _comm; seq = _seq;
   }
@@ -101,6 +104,9 @@ class PE {
     std::map<int, int> pendingReqs;
     std::map<int, int64_t> pendingRReqs;
     std::map<int, std::list< MsgKey > > pendingReceivedPostMsgs;
+
+    std::map<MsgKey, int> receiveStatus;
+    std::list<MsgKey > pendingRnzStartMsgList; //
 
     //handling collectives
     std::vector<int64_t> collectiveSeq;

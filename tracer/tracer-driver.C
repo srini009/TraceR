@@ -1319,12 +1319,48 @@ static void handle_recv_post_event(
   }
 }
 
+/*Just store the message as a new entry in the list
+ * Assume that MPI_Irecv has not been posted*/
+static void store_rnz_start_message(
+		proc_state * ns,
+		tw_bf * b,
+		proc_msg * m,
+		tw_lp * lp) {
+
+  MsgKey key(m->msgId.pe, m->msgId.id, m->msgId.comm, m->msgId.seq);
+  ns->my_pe->pendingRnzStartMsgList.push_back(key);
+  
+}
+
+static void remove_rnz_start_message(
+		proc_state * ns,
+		tw_bf * b,
+		proc_msg * m,
+		tw_lp * lp) {
+   (m->msgId.pe, m->msgId.id, m->msgId.comm, m->msgId.seq);
+
+   for(std::list<MsgKey >::iterator it = ns->my_pe->pendingRnzStartMsgList.begin(); it != ns->my_pe->pendingRnzStartMsgList.end(); it++) {
+     if(it->rank == m->msgId.pe && it->comm ==  m->msgId.comm && it->tag == m->msgId.id && it->seq == m->msgId.seq) 
+        ns->my_pe->pendingRnzStartMsgList.erase(it);
+   }
+}
+
+static void respond_to_pending_rnz_start_messages(
+		proc_state * ns,
+		tw_lp * lp) {
+
+}
+
 static void handle_rnz_start_event(
 		proc_state * ns,
 		tw_bf * b,
 		proc_msg * m,
 		tw_lp * lp)
 {
+  //First store this message appropriately - storing and responding are two separate tasks. 
+  //Let us be clean about separating these two tasks
+  store_rnz_start_message(ns, b, m, lp);
+
   MsgKey key(m->msgId.pe, m->msgId.id, m->msgId.comm, m->msgId.seq);
   KeyType::iterator it = ns->my_pe->pendingRnzStartMsgs.find(key);
   Task *curr_t = &ns->my_pe->myTasks[ns->my_pe->currentTask]; //Get the current task - think about what happens when we are inside
