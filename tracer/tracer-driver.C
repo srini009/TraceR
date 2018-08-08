@@ -1323,9 +1323,8 @@ static void handle_recv_post_event(
  * Assume that MPI_Irecv has not been posted*/
 static void store_rnz_start_message(
 		proc_state * ns,
-		tw_bf * b,
-		proc_msg * m,
-		tw_lp * lp) {
+		proc_msg * m)
+{
 
   MsgKey key(m->msgId.pe, m->msgId.id, m->msgId.comm, m->msgId.seq);
   ns->my_pe->pendingRnzStartMsgList.push_back(key);
@@ -1334,10 +1333,8 @@ static void store_rnz_start_message(
 
 static void remove_rnz_start_message(
 		proc_state * ns,
-		tw_bf * b,
-		proc_msg * m,
-		tw_lp * lp) {
-   (m->msgId.pe, m->msgId.id, m->msgId.comm, m->msgId.seq);
+		proc_msg * m)
+{
 
    for(std::list<MsgKey >::iterator it = ns->my_pe->pendingRnzStartMsgList.begin(); it != ns->my_pe->pendingRnzStartMsgList.end(); it++) {
      if(it->rank == m->msgId.pe && it->comm ==  m->msgId.comm && it->tag == m->msgId.id && it->seq == m->msgId.seq) 
@@ -1359,7 +1356,7 @@ static void handle_rnz_start_event(
 {
   //First store this message appropriately - storing and responding are two separate tasks. 
   //Let us be clean about separating these two tasks
-  store_rnz_start_message(ns, b, m, lp);
+  store_rnz_start_message(ns, m);
 
   MsgKey key(m->msgId.pe, m->msgId.id, m->msgId.comm, m->msgId.seq);
   KeyType::iterator it = ns->my_pe->pendingRnzStartMsgs.find(key);
@@ -1367,6 +1364,11 @@ static void handle_rnz_start_event(
 						  // inside an MPI_Wait for MPI_Isend when this message arrives, and the 
 						  // MPI_Wait for the MPI_Irecv is after the MPI_Wait for MPI_Isend
 						  // In such a situation, we need to ensure progress.
+  int evt = curr_t->event_id;
+
+  //if((evt == TRACER_RECV_COMP_EVT) || (evt == TRACER_RECV_EVT) || (evt == TRACER_SEND_COMP_EVT)) {
+  //}
+
   /* If MPI_Wait or MPI_Recv has already been posted,
    * send out the RECV_POST */
   if(it != ns->my_pe->pendingRnzStartMsgs.end()) {
@@ -1549,6 +1551,8 @@ static tw_stime exec_task(
       ns->my_pe->recvSeq[t->myEntry.node]++;
 
       MsgKey key(t->myEntry.node, t->myEntry.msgId.id, t->myEntry.msgId.comm, seq);
+      ns->my_pe->receiveStatus[key] = 1;
+
       KeyType::iterator it = ns->my_pe->pendingRnzStartMsgs.find(key);
 
 #ifdef TRACER_RDMA_DEBUG
@@ -1589,6 +1593,7 @@ static tw_stime exec_task(
 
       MsgKey key(t->myEntry.node, t->myEntry.msgId.id, t->myEntry.msgId.comm, seq);
       ns->my_pe->recvSeq[t->myEntry.node]++;
+      ns->my_pe->receiveStatus[key] = 1;
 
       KeyType::iterator it = ns->my_pe->pendingMsgs.find(key);
       /*Message is not available. Expect to receive it.*/
