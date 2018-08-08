@@ -1342,6 +1342,23 @@ static void remove_rnz_start_message(
    }
 }
 
+static void respond_to_pending_rnz_start_message(
+		proc_state * ns,
+		proc_msg * m,
+		tw_lp * lp) {
+
+      MsgID recv_post_msg;
+
+      recv_post_msg.size = 16;
+      recv_post_msg.pe = ns->my_pe_num;
+      recv_post_msg.id = m->msgId.id;
+      recv_post_msg.comm = m->msgId.comm;
+      recv_post_msg.seq = m->msgId.seq;
+
+      send_msg(ns, 16, ns->my_pe->currIter, &recv_post_msg, recv_post_msg.seq,  
+        pe_to_lpid(m->msgId.pe, ns->my_job), nic_delay, RECV_POST, lp);
+}
+
 static void respond_to_pending_rnz_start_messages(
 		proc_state * ns,
 		tw_lp * lp) {
@@ -1359,69 +1376,14 @@ static void handle_rnz_start_event(
   store_rnz_start_message(ns, m);
 
   MsgKey key(m->msgId.pe, m->msgId.id, m->msgId.comm, m->msgId.seq);
-  KeyType::iterator it = ns->my_pe->pendingRnzStartMsgs.find(key);
-  Task *curr_t = &ns->my_pe->myTasks[ns->my_pe->currentTask]; //Get the current task - think about what happens when we are inside
-						  // inside an MPI_Wait for MPI_Isend when this message arrives, and the 
-						  // MPI_Wait for the MPI_Irecv is after the MPI_Wait for MPI_Isend
-						  // In such a situation, we need to ensure progress.
+  Task *curr_t = &ns->my_pe->myTasks[ns->my_pe->currentTask]; //Get the current task
   int evt = curr_t->event_id;
 
-  //if((evt == TRACER_RECV_COMP_EVT) || (evt == TRACER_RECV_EVT) || (evt == TRACER_SEND_COMP_EVT)) {
-  //}
-
-  /* If MPI_Wait or MPI_Recv has already been posted,
-   * send out the RECV_POST */
-  if(it != ns->my_pe->pendingRnzStartMsgs.end()) {
-
-    Task *t = &ns->my_pe->myTasks[it->second.front()];
-
-    /* Task is waiting (either MPI_Recv or MPI_Wait), send the RECV_POST message */
-    if((t->event_id == TRACER_RECV_COMP_EVT) || (t->event_id == TRACER_RECV_EVT)) {
-#ifdef TRACER_RDMA_DEBUG
-  fprintf(stderr, "RDMA_DEBUG: Task %d has received an RNZ_START message after MPI_Recv or MPI_Wait for MPI_Irecv has been posted\n", ns->my_pe_num);
-#endif
-      m->model_net_calls++;
-      MsgID recv_post_msg;
-
-      recv_post_msg.size = 16;
-      recv_post_msg.pe = ns->my_pe_num;
-      recv_post_msg.id = m->msgId.id;
-      recv_post_msg.comm = m->msgId.comm;
-      recv_post_msg.seq = m->msgId.seq;
-
-      send_msg(ns, 16, ns->my_pe->currIter, &recv_post_msg, recv_post_msg.seq,  
-        pe_to_lpid(m->msgId.pe, ns->my_job), nic_delay, RECV_POST, lp);
-
-      ns->my_pe->pendingRnzStartMsgs[key].pop_front();
-
-      assert(it->second.size() == 0);
-      ns->my_pe->pendingRnzStartMsgs.erase(it);
-      //Suspect code: What happens to this task? How does the system know that the task was completed?
-    }
-  } else if (curr_t->event_id == TRACER_SEND_COMP_EVT) {
-
-#ifdef TRACER_RDMA_DEBUG
-  fprintf(stderr, "RDMA_DEBUG: Task %d has received an RNZ_START message after MPI_Recv or MPI_Wait for SOME MPI_Isend has been posted\n", ns->my_pe_num);
-#endif
-
-      MsgID recv_post_msg;
-
-      recv_post_msg.size = 16;
-      recv_post_msg.pe = ns->my_pe_num;
-      recv_post_msg.id = m->msgId.id;
-      recv_post_msg.comm = m->msgId.comm;
-      recv_post_msg.seq = m->msgId.seq;
-
-      send_msg(ns, 16, ns->my_pe->currIter, &recv_post_msg, recv_post_msg.seq,  
-        pe_to_lpid(m->msgId.pe, ns->my_job), nic_delay, RECV_POST, lp);
-    
-      ns->my_pe->pendingRnzStartMsgs[key].push_back(-2); //Indicate this was received in "SOME" Wait
-
-  } else { /* MPI_Wait or MPI_Recv has NOT been posted */
-#ifdef TRACER_RDMA_DEBUG_CRITICAL
-  fprintf(stderr, "RDMA_DEBUG: Task %d has received an RNZ_START message before a Wait has been posted \n", ns->my_pe_num);
-#endif
-    ns->my_pe->pendingRnzStartMsgs[key].push_back(-1);
+  /*Respond with a RECV_POST if the current tasking is blocking, and if the RECV has been posted*/
+  if(((evt == TRACER_RECV_COMP_EVT) || (evt == TRACER_RECV_EVT) || (evt == TRACER_SEND_COMP_EVT)) && (ns->my_pe->receiveStatus.find(key) != ns->my_pe->receiveStatus.end()) && ns->my_pe->receiveStatus[key]) {
+  
+      respond_to_pending_rnz_start_message(ns, m, lp);
+      remove_rnz_start_message(ns, m);
   }
 }
 
