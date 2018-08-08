@@ -1347,8 +1347,14 @@ static void remove_rnz_start_message(
 {
 
    for(std::list<MsgKey >::iterator it = ns->my_pe->pendingRnzStartMsgList.begin(); it != ns->my_pe->pendingRnzStartMsgList.end(); it++) {
-     if(it->rank == pe && it->comm ==  m.comm && it->tag == m.id && it->seq == m.seq) 
+#ifdef TRACER_RDMA_DEBUG
+   fprintf(stderr, "RDMA_DEBUG: Checking for removal of message %d, %d, %d, %d against %d, %d, %d, %d\n", pe, m.comm, m.id, m.seq, it->rank, it->comm, it->tag, it->seq);
+#endif
+
+     if((it->rank == pe) && (it->comm ==  m.comm) && (it->tag == m.id) && (it->seq == m.seq)) {
         ns->my_pe->pendingRnzStartMsgList.erase(it);
+        break;
+     }
    }
 }
 
