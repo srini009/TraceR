@@ -1370,6 +1370,23 @@ static void respond_to_pending_rnz_start_messages(
 		proc_state * ns,
 		tw_lp * lp) {
 
+   for(std::list<MsgKey >::iterator it = ns->my_pe->pendingRnzStartMsgList.begin(); it != ns->my_pe->pendingRnzStartMsgList.end(); it++) {
+     MsgKey key(it->rank, it->tag, it->comm, it->seq);
+     if(ns->my_pe->receiveStatus[key] == 1) {
+
+       fprintf(stderr, "Someone is sending a message...\n");
+
+       MsgID recv_post_msg;
+
+       recv_post_msg.size = 16;
+       recv_post_msg.pe = ns->my_pe_num;
+       recv_post_msg.id = it->tag;
+       recv_post_msg.comm = it->comm;
+       recv_post_msg.seq = it->seq;
+       respond_to_pending_rnz_start_message(ns, recv_post_msg, lp, it->rank);
+       ns->my_pe->pendingRnzStartMsgList.erase(it); //Same as remove_pending_rnz_start_message()
+     }
+   }
 }
 
 static void handle_rnz_start_event(
@@ -1387,7 +1404,7 @@ static void handle_rnz_start_event(
   int evt = curr_t->event_id;
 
   /*Respond with a RECV_POST if the current tasking is blocking, and if the RECV has been posted*/
-  if(((evt == TRACER_RECV_COMP_EVT) || (evt == TRACER_RECV_EVT) || (evt == TRACER_SEND_COMP_EVT)) && (ns->my_pe->receiveStatus.find(key) != ns->my_pe->receiveStatus.end()) && ns->my_pe->receiveStatus[key]) {
+  if(((evt == TRACER_RECV_COMP_EVT) || (evt == TRACER_RECV_EVT) || (evt == TRACER_SEND_COMP_EVT) || (evt == TRACER_SEND_EVT)) && (ns->my_pe->receiveStatus.find(key) != ns->my_pe->receiveStatus.end()) && ns->my_pe->receiveStatus[key]) {
   
       MsgID recv_post_msg;
 
@@ -1555,6 +1572,7 @@ static tw_stime exec_task(
           
         }
       }
+      //respond_to_pending_rnz_start_messages(ns, lp); //Check the "pending Rnz message queue and respond to any arrived and ready messages
     }
 
     /* MPI_Recv 
@@ -1604,6 +1622,7 @@ static tw_stime exec_task(
          
         }
       }
+      //respond_to_pending_rnz_start_messages(ns, lp); //Check the "pending Rnz message queue and respond to any arrived and ready messages
     }
 
     /* MPI_Wait for MPI_Irecv
@@ -1647,6 +1666,7 @@ static tw_stime exec_task(
       }
     
       MsgKey key(t->myEntry.node, t->myEntry.msgId.id, t->myEntry.msgId.comm, seq);
+      //respond_to_pending_rnz_start_messages(ns, lp); //Check the "pending Rnz message queue and respond to any arrived and ready messages
 
       KeyType::iterator it_pendingMsgs = ns->my_pe->pendingMsgs.find(key);
       /*Message is not available. Expect to receive it.*/
@@ -1846,7 +1866,9 @@ static tw_stime exec_task(
           sendFinishTime = sendOffset+copyTime;
         } else {
           /* Rendezvous */
+          //respond_to_pending_rnz_start_messages(ns, lp); //Check the "pending Rnz message queue and respond to any arrived and ready messages
           taskEntry->msgId.seq = ns->my_pe->sendSeq[node]++;
+           
 
           /*RDMA_Write: Sender does NOT transfer data right away. 
            *Non-blocking or not, sender just sends a 16-byte "RNZ_START" message here in an Eager manner. 
@@ -1908,6 +1930,8 @@ static tw_stime exec_task(
     }
 
     if(t->event_id == TRACER_SEND_COMP_EVT) {
+        respond_to_pending_rnz_start_messages(ns, lp); //Check the "pending Rnz message queue and respond to any arrived and ready messages
+
         std::map<int, int>::iterator it = ns->my_pe->pendingReqs.find(t->req_id);
         
         /* Indicate that the wait has been posted by modifying entry in pendingReqs */
