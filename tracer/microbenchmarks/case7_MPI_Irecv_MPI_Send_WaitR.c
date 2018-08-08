@@ -78,7 +78,7 @@ main(int argc, char **argv) {
 	}
 
 	MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
-        #define DATA_SIZE 100000000
+        #define DATA_SIZE 10000
 	buffer = (int*)malloc(DATA_SIZE*sizeof(int));
 	for(i=0; i < DATA_SIZE; i++)
 		buffer[i] = 0;

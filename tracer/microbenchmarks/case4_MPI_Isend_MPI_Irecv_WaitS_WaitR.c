@@ -68,6 +68,9 @@ main(int argc, char **argv) {
 	double starttime, endtime;
 
 	MPI_Init(&argc, &argv);
+#if WRITE_OTF2_TRACE
+  SCOREP_RECORDING_OFF();
+#endif
 	MPI_Comm_size(MPI_COMM_WORLD, &num);
 	if(num != 2) {
 		printf("Example must be run with 2 processes only.\n");
@@ -75,10 +78,8 @@ main(int argc, char **argv) {
 	}
 
 	MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
-        #define DATA_SIZE 1000
+        #define DATA_SIZE 10000
 	buffer = (int*)malloc(DATA_SIZE*sizeof(int));
-	for(i=0; i < 1000; i++)
-		buffer[i] = 0;
 
 	init_arrays();
 
@@ -92,11 +93,9 @@ main(int argc, char **argv) {
 
 	if(my_rank == 1) {
 	//Send
-	        fprintf(stderr, "Starting send....\n\n\n\n\n\n\n\n");
 		MPI_Isend(buffer, DATA_SIZE, MPI_INT, 0, 123, MPI_COMM_WORLD, &req);
 		compute(COMPUTE_TIME);
 		MPI_Wait(&req, &stat);
-                fprintf(stderr, "Ending send....\n\n\n\n\n\n\n\n");
 	} else if(my_rank == 0) {
 	//Recv
                 compute(WAIT_TIME);

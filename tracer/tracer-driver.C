@@ -1400,7 +1400,7 @@ static void handle_rnz_start_event(
   store_rnz_start_message(ns, m);
 
   MsgKey key(m->msgId.pe, m->msgId.id, m->msgId.comm, m->msgId.seq);
-  Task *curr_t = &ns->my_pe->myTasks[ns->my_pe->currentTask]; //Get the current task
+  Task *curr_t = &ns->my_pe->myTasks[ns->my_pe->currentTaskOnTopOfStack]; //Get the current task
   int evt = curr_t->event_id;
 
   /*Respond with a RECV_POST if the current tasking is blocking, and if the RECV has been posted*/
@@ -1480,6 +1480,9 @@ static tw_stime exec_task(
       b->c10 = 1;
       return 0;
     }
+
+    ns->my_pe->currentTaskOnTopOfStack = task_id.taskid;
+
 #ifdef TRACER_RDMA_DEBUG
   fprintf(stderr, "Task %d Exec task id: %d and event id %d invoked at: %lf\n", ns->my_pe_num, task_id.taskid, (ns->my_pe->myTasks[task_id.taskid]).event_id, tw_now(lp));
 #endif
@@ -1930,7 +1933,7 @@ static tw_stime exec_task(
     }
 
     if(t->event_id == TRACER_SEND_COMP_EVT) {
-        respond_to_pending_rnz_start_messages(ns, lp); //Check the "pending Rnz message queue and respond to any arrived and ready messages
+        //respond_to_pending_rnz_start_messages(ns, lp); //Check the "pending Rnz message queue and respond to any arrived and ready messages
 
         std::map<int, int>::iterator it = ns->my_pe->pendingReqs.find(t->req_id);
         

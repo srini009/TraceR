@@ -79,6 +79,7 @@ class PE {
     int myNum, myEmPE, jobNum;
     int tasksCount;	//total number of tasks
     int currentTask; // index of first not-executed task (helps searching messages)
+    int currentTaskOnTopOfStack; // index of first not-executed task (helps searching messages)
     int firstTask;
     int currIter;
     int loop_start_task;

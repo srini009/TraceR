@@ -10,6 +10,7 @@
 #include "microbenchmarks.h"
 
 #define DIM 25
+
 static float **a = NULL, *x = NULL, *y = NULL;
 
 void
@@ -81,9 +82,8 @@ main(int argc, char **argv) {
 	}
 
 	MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
-	buffer = (int*)malloc(100000000*sizeof(int));
-	for(i=0; i < 1000; i++)
-		buffer[i] = 0;
+        #define DATA_SIZE 10000
+	buffer = (int*)malloc(DATA_SIZE*sizeof(int));
 
 	init_arrays();
 
@@ -97,13 +97,13 @@ main(int argc, char **argv) {
 
 	if(my_rank == 1) {
 	//Send
-		MPI_Isend(buffer, 100000000, MPI_INT, 0, 123, MPI_COMM_WORLD, &req);
+		MPI_Isend(buffer, DATA_SIZE, MPI_INT, 0, 123, MPI_COMM_WORLD, &req);
 		compute(COMPUTE_TIME);
 		MPI_Wait(&req, &stat);
 	} else if(my_rank == 0) {
 	//Recv
                 compute(WAIT_TIME);
-		MPI_Irecv(buffer, 100000000, MPI_INT, 1, 123, MPI_COMM_WORLD, &req2);
+		MPI_Irecv(buffer, DATA_SIZE, MPI_INT, 1, 123, MPI_COMM_WORLD, &req2);
                 compute(COMPUTE_TIME);
                 MPI_Wait(&req2, &stat2);
 	}
