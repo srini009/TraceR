@@ -1370,11 +1370,14 @@ static void respond_to_pending_rnz_start_messages(
 		proc_state * ns,
 		tw_lp * lp) {
 
-   for(std::list<MsgKey >::iterator it = ns->my_pe->pendingRnzStartMsgList.begin(); it != ns->my_pe->pendingRnzStartMsgList.end(); it++) {
+   std::list<MsgKey >::iterator it = ns->my_pe->pendingRnzStartMsgList.begin();
+   while(it != ns->my_pe->pendingRnzStartMsgList.end()) {
+
      MsgKey key(it->rank, it->tag, it->comm, it->seq);
      if(ns->my_pe->receiveStatus[key] == 1) {
 
-       fprintf(stderr, "Someone is sending a message...\n");
+       //fprintf(stderr, "Sending a message: %d %d %d %d\n", ns->my_pe_num, it->rank, it->tag, it->seq);
+
 
        MsgID recv_post_msg;
 
@@ -1384,8 +1387,10 @@ static void respond_to_pending_rnz_start_messages(
        recv_post_msg.comm = it->comm;
        recv_post_msg.seq = it->seq;
        respond_to_pending_rnz_start_message(ns, recv_post_msg, lp, it->rank);
-       ns->my_pe->pendingRnzStartMsgList.erase(it); //Same as remove_pending_rnz_start_message()
+       it = ns->my_pe->pendingRnzStartMsgList.erase(it); //Same as remove_pending_rnz_start_message()
+       continue;
      }
+     ++it;
    }
 }
 
@@ -1405,7 +1410,7 @@ static void handle_rnz_start_event(
 
   /*Respond with a RECV_POST if the current tasking is blocking, and if the RECV has been posted*/
   if(((evt == TRACER_RECV_COMP_EVT) || (evt == TRACER_RECV_EVT) || (evt == TRACER_SEND_COMP_EVT) || (evt == TRACER_SEND_EVT)) && (ns->my_pe->receiveStatus.find(key) != ns->my_pe->receiveStatus.end()) && ns->my_pe->receiveStatus[key]) {
-  
+ 
       MsgID recv_post_msg;
 
       recv_post_msg.size = 16;
@@ -1416,6 +1421,8 @@ static void handle_rnz_start_event(
 
       respond_to_pending_rnz_start_message(ns, recv_post_msg, lp, m->msgId.pe);
       remove_rnz_start_message(ns, recv_post_msg, m->msgId.pe);
+  } else {
+      //fprintf(stderr, "Storing a message: %d %d %d %d\n", ns->my_pe_num, m->msgId.pe, m->msgId.id, m->msgId.seq);
   }
 }
 
@@ -1575,7 +1582,6 @@ static tw_stime exec_task(
           
         }
       }
-      //respond_to_pending_rnz_start_messages(ns, lp); //Check the "pending Rnz message queue and respond to any arrived and ready messages
     }
 
     /* MPI_Recv 
@@ -1625,7 +1631,7 @@ static tw_stime exec_task(
          
         }
       }
-      //respond_to_pending_rnz_start_messages(ns, lp); //Check the "pending Rnz message queue and respond to any arrived and ready messages
+      respond_to_pending_rnz_start_messages(ns, lp); //Check the "pending Rnz message queue and respond to any arrived and ready messages
     }
 
     /* MPI_Wait for MPI_Irecv
@@ -1669,7 +1675,7 @@ static tw_stime exec_task(
       }
     
       MsgKey key(t->myEntry.node, t->myEntry.msgId.id, t->myEntry.msgId.comm, seq);
-      //respond_to_pending_rnz_start_messages(ns, lp); //Check the "pending Rnz message queue and respond to any arrived and ready messages
+      respond_to_pending_rnz_start_messages(ns, lp); //Check the "pending Rnz message queue and respond to any arrived and ready messages
 
       KeyType::iterator it_pendingMsgs = ns->my_pe->pendingMsgs.find(key);
       /*Message is not available. Expect to receive it.*/
@@ -1869,7 +1875,6 @@ static tw_stime exec_task(
           sendFinishTime = sendOffset+copyTime;
         } else {
           /* Rendezvous */
-          //respond_to_pending_rnz_start_messages(ns, lp); //Check the "pending Rnz message queue and respond to any arrived and ready messages
           taskEntry->msgId.seq = ns->my_pe->sendSeq[node]++;
            
 
@@ -1909,7 +1914,10 @@ static tw_stime exec_task(
             ns->my_pe->pendingReqs[t->req_id] = -1;
           }
 
-          if(!t->isNonBlocking) return 0;
+          if(!t->isNonBlocking) {
+            respond_to_pending_rnz_start_messages(ns, lp);
+            return 0;
+          }
           sendFinishTime += sendOffset+copyTime+nic_delay;
         }
       }
@@ -1933,7 +1941,7 @@ static tw_stime exec_task(
     }
 
     if(t->event_id == TRACER_SEND_COMP_EVT) {
-        //respond_to_pending_rnz_start_messages(ns, lp); //Check the "pending Rnz message queue and respond to any arrived and ready messages
+        respond_to_pending_rnz_start_messages(ns, lp); //Check the "pending Rnz message queue and respond to any arrived and ready messages
 
         std::map<int, int>::iterator it = ns->my_pe->pendingReqs.find(t->req_id);
         
