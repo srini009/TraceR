@@ -1688,7 +1688,7 @@ static tw_stime exec_task(
         fprintf(stderr, "RDMA_DEBUG: Task %d Expect to receive a data message\n", ns->my_pe_num);
          #endif
         ns->my_pe->pendingMsgs[key].push_back(task_id.taskid);
-        return 0; //Suspect code
+        return 0;
       } else { /*Message is available. Take it!*/
   
         #ifdef TRACER_RDMA_DEBUG_CRITICAL
@@ -1977,7 +1977,7 @@ static tw_stime exec_task(
           assert(it_recv_post->second.size() == 0);
           ns->my_pe->pendingReceivedPostMsgs.erase(it_recv_post);
         } else {
-          return 0; //Suspect code
+          return 0;
         } 
     }
 #endif
