@@ -100,7 +100,6 @@ class PE {
 
     KeyType pendingMsgs;
     KeyType pendingRMsgs;
-    KeyType pendingRnzStartMsgs; //Have a map similar to a regular recv post of data message associated with the msg
     int64_t *sendSeq, *recvSeq;
     std::map<int, int> pendingReqs;
     std::map<int, int64_t> pendingRReqs;

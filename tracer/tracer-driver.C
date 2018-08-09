@@ -773,6 +773,9 @@ static void proc_finalize(
         ns->my_pe->pendingRCollMsgs.size());
     }
 
+    //Check that we have no pending RNZ_START messages sitting around. If so, that's trouble.
+    assert(ns->my_pe->pendingRnzStartMsgList.size() == 0);
+
     int count = 0;
     std::map<int64_t, std::map<int64_t, std::map<int, int> > >::iterator it =
       ns->my_pe->pendingCollMsgs.begin();
