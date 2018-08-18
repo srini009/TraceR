@@ -23,4 +23,4 @@ stencil4d: stencil4d.C
 	$(CC) $(OPTS) $(INCS_DEF) -o $@ $<
 
 clean:
-	rm -f stencil4d
+	rm -rf stencil4d core* tracer-out-* tracer_stats*

@@ -56,8 +56,9 @@ enum proc_event
     RECV_MSG,   /* bigsim, when received a message */
     BCAST,      /* broadcast --> to be deprecated */
     EXEC_COMPLETE,   /* bigsim, when completed an execution */
+    RNZ_START,
     SEND_COMP, /* Send completed for Isends */
-    RECV_POST, /* Message from receiver that the recv is posted */
+    RECV_POST, /* Message from receiver that the recv is posted, acknowledging receipt of RNZ_START*/
     COLL_BCAST, /* Collective impl for bcast */
     COLL_REDUCTION, /* Collective impl for reduction */
     COLL_A2A, /* Collective impl for a2a */
@@ -163,6 +164,13 @@ static void handle_recv_post_event(
     tw_bf * b,
     proc_msg * m,
    tw_lp * lp);
+
+//RDMA protocol specific functions
+static void handle_rnz_start_event(
+                proc_state * ns,
+                tw_bf * b,
+                proc_msg * m,
+                tw_lp * lp);
 
 //reverse event handler declarations
 static void handle_kickoff_rev_event(
