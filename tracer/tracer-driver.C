@@ -1930,6 +1930,8 @@ static tw_stime exec_task(
     }
 
     if(t->event_id == TRACER_SEND_COMP_EVT) {
+        respond_to_pending_rnz_start_messages(ns, lp);
+
         std::map<int, int>::iterator it = ns->my_pe->pendingReqs.find(t->req_id);
         if(it != ns->my_pe->pendingReqs.end()) {
           ns->my_pe->pendingReqs[t->req_id] = task_id.taskid; //Wait
