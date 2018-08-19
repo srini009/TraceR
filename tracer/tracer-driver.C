@@ -560,7 +560,10 @@ static void proc_init(
     ns->end_ts = 0;
     ns->my_pe->sendSeq = new int64_t[jobs[ns->my_job].numRanks];
     ns->my_pe->recvSeq = new int64_t[jobs[ns->my_job].numRanks];
+    ns->my_pe->rdma_protocol = new int64_t[jobs[ns->my_job].numRanks];
+
     for(int i = 0; i < jobs[ns->my_job].numRanks; i++) {
+      ns->my_pe->rdma_protocol[i] = RDMA_WRITE; //Default
       ns->my_pe->sendSeq[i] = ns->my_pe->recvSeq[i] = 0;
     }
 
@@ -1301,25 +1304,40 @@ static void handle_recv_post_event(
   }
 
   else { /* Non-blocking */
-    if(ns->my_pe->pendingReqs[t->req_id] != -1) { /*Has MPI_Wait been posted? */
-      #ifdef TRACER_RDMA_DEBUG 
-      fprintf(stderr, "RDMA_DEBUG: Task %d RECV_POST message received after MPI_Wait was posted\n", ns->my_pe_num);
-      #endif
-      m->model_net_calls = 1;
-      delegate_send_msg(ns, lp, m, b, t, ns->my_pe->pendingReqs[t->req_id], 0);
-      m->executed.taskid = ns->my_pe->pendingReqs[t->req_id];
-      it->second.pop_front();
-      assert(it->second.size() == 0);
-      ns->my_pe->pendingRMsgs.erase(it);
-    } 
 
-    else { /* Store the message until the MPI_Wait is posted*/
-      #ifdef TRACER_RDMA_DEBUG 
-      fprintf(stderr, "RDMA_DEBUG: Task %d RECV_POST message received before MPI_Wait was posted\n", ns->my_pe_num);
-      #endif
-      ns->my_pe->pendingReceivedPostMsgs[t->req_id].push_back(key); //This is done so that MPI_Wait is aware of the receipt of the message
+    /*RDMA_WRITE - check if we need to respond or store the message*/
+    if(ns->my_pe->rdma_protocol[m->msgId.pe] == RDMA_WRITE] {
+      if(ns->my_pe->pendingReqs[t->req_id] != -1) { /*Has MPI_Wait been posted? */
+        #ifdef TRACER_RDMA_DEBUG 
+        fprintf(stderr, "RDMA_DEBUG: Task %d RECV_POST message received after MPI_Wait was posted\n", ns->my_pe_num);
+        #endif
+        m->model_net_calls = 1;
+        delegate_send_msg(ns, lp, m, b, t, ns->my_pe->pendingReqs[t->req_id], 0);
+        m->executed.taskid = ns->my_pe->pendingReqs[t->req_id];
+        it->second.pop_front();
+        assert(it->second.size() == 0);
+        ns->my_pe->pendingRMsgs.erase(it);
+      } 
+
+      else { /* Store the message until the MPI_Wait is posted*/
+        #ifdef TRACER_RDMA_DEBUG 
+        fprintf(stderr, "RDMA_DEBUG: Task %d RECV_POST message received before MPI_Wait was posted\n", ns->my_pe_num);
+        #endif
+        ns->my_pe->pendingReceivedPostMsgs[t->req_id].push_back(key); //This is done so that MPI_Wait is aware of the receipt of the message
+      }
+    } else { /*RDMA_READ - Immediately send the data - we assume this is done by the RDMA hardware automatically*/
+        #ifdef TRACER_RDMA_DEBUG 
+        fprintf(stderr, "RDMA_DEBUG: Task %d RECV_POST message received after MPI_Wait was posted\n", ns->my_pe_num);
+        #endif
+        m->model_net_calls = 1;
+        delegate_send_msg(ns, lp, m, b, t, ns->my_pe->pendingReqs[t->req_id], 0);
+        m->executed.taskid = ns->my_pe->pendingReqs[t->req_id];
+        it->second.pop_front();
+        assert(it->second.size() == 0);
+        ns->my_pe->pendingRMsgs.erase(it);
     }
   }
+  
 }
 
 /*Just store the message as a new entry in the list
@@ -1946,39 +1964,42 @@ static tw_stime exec_task(
     if(t->event_id == TRACER_SEND_COMP_EVT) {
         respond_to_pending_rnz_start_messages(ns, lp); //Check the "pending Rnz message queue and respond to any arrived and ready messages
 
-        std::map<int, int>::iterator it = ns->my_pe->pendingReqs.find(t->req_id);
+        if(ns->my_pe->rdma_protocol[m->msgId.pe] == RDMA_WRITE]) {
+           std::map<int, int>::iterator it = ns->my_pe->pendingReqs.find(t->req_id);
         
-        /* Indicate that the wait has been posted by modifying entry in pendingReqs */
-        assert(it !=  ns->my_pe->pendingReqs.end());
-        assert(it->second == -1);
-        ns->my_pe->pendingReqs[t->req_id] = task_id.taskid;
-        #ifdef TRACER_RDMA_DEBUG
-        fprintf(stderr, "RDMA_DEBUG: Task %d In MPI_Wait for MPI_Isend\n", ns->my_pe_num); 
-         #endif
+           /* Indicate that the wait has been posted by modifying entry in pendingReqs */
+           assert(it !=  ns->my_pe->pendingReqs.end());
+           assert(it->second == -1);
+           ns->my_pe->pendingReqs[t->req_id] = task_id.taskid;
+           #ifdef TRACER_RDMA_DEBUG
+           fprintf(stderr, "RDMA_DEBUG: Task %d In MPI_Wait for MPI_Isend\n", ns->my_pe_num); 
+            #endif
 
-        std::map<int, std::list < MsgKey > >::iterator it_recv_post = ns->my_pe->pendingReceivedPostMsgs.find(t->req_id);
+           std::map<int, std::list < MsgKey > >::iterator it_recv_post = ns->my_pe->pendingReceivedPostMsgs.find(t->req_id);
 
-        if(it_recv_post != ns->my_pe->pendingReceivedPostMsgs.end()) {
-          m->model_net_calls++;
-          KeyType::iterator it_rMsgs = ns->my_pe->pendingRMsgs.find(it_recv_post->second.front());
-          assert(it_rMsgs->second.size() != 0); //Assert that we have indeed added the entry!
-          Task *t_ = &ns->my_pe->myTasks[it_rMsgs->second.front()]; //This is the MPI_Isend task
-          delegate_send_msg(ns, lp, m, b, t_, task_id.taskid, 0);
-          m->executed.taskid = task_id.taskid;
-          #ifdef TRACER_RDMA_DEBUG
-          fprintf(stderr, "RDMA_DEBUG: Task %d In MPI_Wait for MPI_Isend. Sent data...\n", ns->my_pe_num); 
-          #endif
+          if(it_recv_post != ns->my_pe->pendingReceivedPostMsgs.end()) {
+             m->model_net_calls++;
+             KeyType::iterator it_rMsgs = ns->my_pe->pendingRMsgs.find(it_recv_post->second.front());
+             assert(it_rMsgs->second.size() != 0); //Assert that we have indeed added the entry!
+             Task *t_ = &ns->my_pe->myTasks[it_rMsgs->second.front()]; //This is the MPI_Isend task
+             delegate_send_msg(ns, lp, m, b, t_, task_id.taskid, 0);
+             m->executed.taskid = task_id.taskid;
+             #ifdef TRACER_RDMA_DEBUG
+             fprintf(stderr, "RDMA_DEBUG: Task %d In MPI_Wait for MPI_Isend. Sent data...\n", ns->my_pe_num); 
+             #endif
 
-          it_rMsgs->second.pop_front();
-          assert(it_rMsgs->second.size() == 0);
-          ns->my_pe->pendingRMsgs.erase(it_rMsgs);
+             it_rMsgs->second.pop_front();
+             assert(it_rMsgs->second.size() == 0);
+             ns->my_pe->pendingRMsgs.erase(it_rMsgs);
 
-          it_recv_post->second.pop_front();
-          assert(it_recv_post->second.size() == 0);
-          ns->my_pe->pendingReceivedPostMsgs.erase(it_recv_post);
-        } else {
-          return 0;
-        } 
+             it_recv_post->second.pop_front();
+             assert(it_recv_post->second.size() == 0);
+             ns->my_pe->pendingReceivedPostMsgs.erase(it_recv_post);
+           } else {
+             return 0;
+           } 
+        } else { /*RDMA_READ*/
+        }
     }
 #endif
     

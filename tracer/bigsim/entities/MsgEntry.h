@@ -22,6 +22,10 @@
 #endif
 #include <stdint.h>
 
+#define RDMA_WRITE 0
+#define RDMA_READ 1
+#define RDMA_TRACER_DEFAULT 2;
+
 struct MsgID {
     int pe;	
     int id; 

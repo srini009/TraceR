@@ -84,6 +84,9 @@ class PE {
     int currIter;
     int loop_start_task;
 
+    /*RDMA_PROTOCOL to use when I am the sender  - one entry per receiver*/
+    int64_t *rdma_protocol;
+
     bool noUnsatDep(int iter, int tInd);	// there is no unsatisfied dependency for task
     void mark_all_done(int iter, int tInd);
     double taskExecTime(int tInd);
