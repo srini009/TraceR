@@ -1933,6 +1933,7 @@ static tw_stime exec_task(
                ns->my_pe->pendingReqs.end());
             /*RDMA_Write: -1 indicates that the wait has not been enabled yet */
             ns->my_pe->pendingReqs[t->req_id] = -1;
+            ns->my_pe->reqIdToReceiverMapping[t->req_id] = taskEntry->node;
           }
 
           if(!t->isNonBlocking) {
@@ -1964,11 +1965,11 @@ static tw_stime exec_task(
     if(t->event_id == TRACER_SEND_COMP_EVT) {
         respond_to_pending_rnz_start_messages(ns, lp); //Check the "pending Rnz message queue and respond to any arrived and ready messages
 
-        if(ns->my_pe->rdma_protocol[m->msgId.pe] == RDMA_WRITE]) {
-           std::map<int, int>::iterator it = ns->my_pe->pendingReqs.find(t->req_id);
-        
+        std::map<int, int>::iterator it = ns->my_pe->pendingReqs.find(t->req_id);
+           
+        if(it != ns->my_pe->pendingReqs.end()) { 
+          if(ns->my_pe->rdma_protocol[ns->my_pe->reqIdToReceiverMapping[t->req_id]] == RDMA_WRITE) {
            /* Indicate that the wait has been posted by modifying entry in pendingReqs */
-           assert(it !=  ns->my_pe->pendingReqs.end());
            assert(it->second == -1);
            ns->my_pe->pendingReqs[t->req_id] = task_id.taskid;
            #ifdef TRACER_RDMA_DEBUG
@@ -1998,8 +1999,8 @@ static tw_stime exec_task(
            } else {
              return 0;
            } 
-        } else { /*RDMA_READ*/
-        }
+         } else { /*RDMA_READ*/
+         }
     }
 #endif
     

@@ -106,6 +106,7 @@ class PE {
     int64_t *sendSeq, *recvSeq;
     std::map<int, int> pendingReqs;
     std::map<int, int64_t> pendingRReqs;
+    std::map<int64_t, int> reqIdToReceiverMapping;
     std::map<int, std::list< MsgKey > > pendingReceivedPostMsgs;
 
     std::map<MsgKey, int> receiveStatus;
