@@ -1306,7 +1306,7 @@ static void handle_recv_post_event(
   else { /* Non-blocking */
 
     /*RDMA_WRITE - check if we need to respond or store the message*/
-    if(ns->my_pe->rdma_protocol[m->msgId.pe] == RDMA_WRITE] {
+    if(ns->my_pe->rdma_protocol[m->msgId.pe] == RDMA_WRITE) {
       if(ns->my_pe->pendingReqs[t->req_id] != -1) { /*Has MPI_Wait been posted? */
         #ifdef TRACER_RDMA_DEBUG 
         fprintf(stderr, "RDMA_DEBUG: Task %d RECV_POST message received after MPI_Wait was posted\n", ns->my_pe_num);
@@ -2000,7 +2000,10 @@ static tw_stime exec_task(
              return 0;
            } 
          } else { /*RDMA_READ*/
+             ns->my_pe->pendingReqs[t->req_id] = task_id.taskid; //Wait
+             return 0;
          }
+      }
     }
 #endif
     
