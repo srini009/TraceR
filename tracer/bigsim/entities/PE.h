@@ -79,12 +79,12 @@ class PE {
     int myNum, myEmPE, jobNum;
     int tasksCount;	//total number of tasks
     int currentTask; // index of first not-executed task (helps searching messages)
-    int currentTaskOnTopOfStack; // index of first not-executed task (helps searching messages)
+    int currentTaskOnTopOfStack; // index of first not-executed task (helps searching messages). Used exclusively in RDMA protocol implementation
     int firstTask;
     int currIter;
     int loop_start_task;
 
-    /*RDMA_PROTOCOL to use when I am the sender  - one entry per receiver*/
+    /*RDMA_PROTOCOL to use when I am the sender - one entry per receiver*/
     int64_t *rdma_protocol;
 
     bool noUnsatDep(int iter, int tInd);	// there is no unsatisfied dependency for task
@@ -106,11 +106,11 @@ class PE {
     int64_t *sendSeq, *recvSeq;
     std::map<int, int> pendingReqs;
     std::map<int, int64_t> pendingRReqs;
-    std::map<int64_t, int> reqIdToReceiverMapping;
-    std::map<int, std::list< MsgKey > > pendingReceivedPostMsgs;
+    std::map<int64_t, int> reqIdToReceiverMapping; //Gives me the receiver PE id for a given non-blocking request id. Used in RDMA protocol tuning
+    std::map<int, std::list< MsgKey > > pendingReceivedPostMsgs; //List of arrived RECV_POST post messages corresponding to a request id. 
 
-    std::map<MsgKey, int> receiveStatus;
-    std::list<MsgKey > pendingRnzStartMsgList; //
+    std::map<MsgKey, int> receiveStatus; //Whether or not the MPI_Recv/MPI_Irecv for a given message has been posted
+    std::list<MsgKey > pendingRnzStartMsgList; //List of arrived RNZ_START messages. Not all of them would be ready to respond to though
 
     //handling collectives
     std::vector<int64_t> collectiveSeq;
