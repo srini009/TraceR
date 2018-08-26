@@ -86,6 +86,13 @@ class PE {
 
     /*RDMA_PROTOCOL to use when I am the sender - one entry per receiver*/
     int64_t *rdma_protocol;
+    
+    /*Below are data structures that collect statistics for non-blocking point-to-point communications*/
+    double *avg_compute_time_sender; //Avg. time diff between MPI_Wait and MPI_Isend for a sender in a sender-receiver pair
+    double *avg_compute_time_receiver; //Avg. time diff between MPI_Wait and MPI_Irecv for a receiver in a sender-receiver pair
+    double *effective_time_diff; //Avg. time diff between arrival of an RNZ_START and posting of MPI_Irecv for a sender-receiver pair with sign
+    int64_t *number_of_messages; //Number of messages between a sender-receiver pair
+    double *avg_data_message_size; //Avg. message size for a sender-receiver pair
 
     bool noUnsatDep(int iter, int tInd);	// there is no unsatisfied dependency for task
     void mark_all_done(int iter, int tInd);
