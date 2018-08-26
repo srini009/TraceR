@@ -562,14 +562,17 @@ static void proc_init(
     ns->my_pe->recvSeq = new int64_t[jobs[ns->my_job].numRanks];
     ns->my_pe->rdma_protocol = new int64_t[jobs[ns->my_job].numRanks];
     ns->my_pe->avg_compute_time_sender = new double[jobs[ns->my_job].numRanks];
+    ns->my_pe->curr_compute_time_sender = new double[jobs[ns->my_job].numRanks];
     ns->my_pe->avg_compute_time_receiver = new double[jobs[ns->my_job].numRanks];
+    ns->my_pe->curr_compute_time_receiver = new double[jobs[ns->my_job].numRanks];
     ns->my_pe->effective_time_diff = new double[jobs[ns->my_job].numRanks];
+    ns->my_pe->curr_effective_time_diff = new double[jobs[ns->my_job].numRanks];
     ns->my_pe->avg_data_message_size = new double[jobs[ns->my_job].numRanks];
     ns->my_pe->number_of_messages = new int64_t[jobs[ns->my_job].numRanks];
 
     for(int i = 0; i < jobs[ns->my_job].numRanks; i++) {
       ns->my_pe->rdma_protocol[i] = RDMA_WRITE; //Set as default
-      ns->my_pe->avg_compute_time_sender[i] = ns->my_pe->avg_compute_time_receiver[i] = ns->my_pe->effective_time_diff[i] =  ns->my_pe->avg_data_message_size[i]  = 0.0;
+      ns->my_pe->avg_compute_time_sender[i] = ns->my_pe->curr_compute_time_sender[i] = ns->my_pe->avg_compute_time_receiver[i] = ns->my_pe->curr_compute_time_receiver[i] = ns->my_pe->effective_time_diff[i] = ns->my_pe->curr_effective_time_diff[i] = ns->my_pe->avg_data_message_size[i]  = 0.0;
       ns->my_pe->number_of_messages[i] = 0;
       ns->my_pe->sendSeq[i] = ns->my_pe->recvSeq[i] = 0;
     }
