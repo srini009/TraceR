@@ -1887,7 +1887,9 @@ static tw_stime exec_task(
         } else {
           /* Rendezvous */
           taskEntry->msgId.seq = ns->my_pe->sendSeq[node]++;
-           
+          ns->my_pe->curr_compute_time_sender[node] = tw_now(lp); 
+          ns->my_pe->avg_data_message_size[node] += MsgEntry_getSize(taskEntry); 
+          ns->my_pe->number_of_messages[node]++; 
 
           /*Sender does NOT transfer data right away. 
            *Non-blocking or not, sender just sends a 16-byte "RNZ_START" message here in an Eager manner. 
@@ -1949,8 +1951,10 @@ static tw_stime exec_task(
     if(t->event_id == TRACER_SEND_COMP_EVT) {
         /* Respond to pending and ready RNZ_START messages to ensure progress*/
         respond_to_pending_rnz_start_messages(ns, lp); 
-
         std::map<int, int>::iterator it = ns->my_pe->pendingReqs.find(t->req_id);
+        /* Gather timing statistics for RDMA protocol tuning */
+        ns->my_pe->curr_compute_time_sender[ns->my_pe->reqIdToReceiverMapping[t->req_id]] = tw_now(lp) - ns->my_pe->curr_compute_time_sender[ns->my_pe->reqIdToReceiverMapping[t->req_id]];
+        ns->my_pe->avg_compute_time_sender[ns->my_pe->reqIdToReceiverMapping[t->req_id]] += ns->my_pe->curr_compute_time_sender[ns->my_pe->reqIdToReceiverMapping[t->req_id]];
            
         if(it != ns->my_pe->pendingReqs.end()) {
            /*If RDMA_WRITE, then for sure the data transfer has not taken place. 
