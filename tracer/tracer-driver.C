@@ -794,8 +794,9 @@ static void proc_finalize(
       if(ns->my_pe->number_of_messages[i] > 0) {
         ns->my_pe->avg_compute_time_sender[i] =  ns->my_pe->avg_compute_time_sender[i]/ns->my_pe->number_of_messages[i];
 	ns->my_pe->avg_compute_time_receiver[i] =  ns->my_pe->avg_compute_time_receiver[i]/ns->my_pe->number_of_messages[i];
-	ns->my_pe->avg_data_message_size[i] =  ns->my_pe->avg_data_message_size[i]/ns->my_pe->number_of_messages[i]; 
-        fprintf(stderr, "RDMA_DEBUG: Avg. compute time: %lf, avg. receive time: %lf, avg. data message size: %lf for PE %d with PE %d\n", ns->my_pe->avg_compute_time_sender[i], ns->my_pe->avg_compute_time_receiver[i], ns->my_pe->avg_data_message_size[i], ns->my_pe_num, i);
+        ns->my_pe->effective_time_diff[i] = ns->my_pe->effective_time_diff[i]/ns->my_pe->number_of_messages[i];
+	ns->my_pe->avg_data_message_size[i] =  ns->my_pe->avg_data_message_size[i]/ns->my_pe->number_of_messages[i];
+        fprintf(stderr, "RDMA_DEBUG: Avg. compute time: %lf, avg. receive time: %lf, effective time diff: %lf, avg. data message size: %lf for PE %d with PE %d\n", ns->my_pe->avg_compute_time_sender[i], ns->my_pe->avg_compute_time_receiver[i], ns->my_pe->effective_time_diff[i], ns->my_pe->avg_data_message_size[i], ns->my_pe_num, i);
       }
     }
 
@@ -1450,6 +1451,15 @@ static void handle_rnz_start_event(
   Task *curr_t = &ns->my_pe->myTasks[ns->my_pe->currentTaskOnTopOfStack]; //Get the current task
   int evt = curr_t->event_id;
 
+  /* Collect RDMA statistics */
+  if((ns->my_pe->receiveStatus.find(key) != ns->my_pe->receiveStatus.end()) && (ns->my_pe->receiveStatus[key])) { /* MPI_Irecv has already been posted */
+    ns->my_pe->curr_effective_time_diff[m->msgId.pe] = tw_now(lp) - ns->my_pe->curr_effective_time_diff[m->msgId.pe];
+    ns->my_pe->effective_time_diff[m->msgId.pe] += ns->my_pe->curr_effective_time_diff[m->msgId.pe];
+
+  } else { /* MPI_Irecv has not been posted yet */
+    ns->my_pe->curr_effective_time_diff[m->msgId.pe] = tw_now(lp);
+  }
+
   /*Respond with a RECV_POST if the current tasking is blocking, and if the RECV has been posted*/
   if(((evt == TRACER_RECV_COMP_EVT) || (evt == TRACER_RECV_EVT) || (evt == TRACER_SEND_COMP_EVT) || (evt == TRACER_SEND_EVT)) && (ns->my_pe->receiveStatus.find(key) != ns->my_pe->receiveStatus.end()) && ns->my_pe->receiveStatus[key]) {
  
@@ -1614,11 +1624,17 @@ static tw_stime exec_task(
 #ifdef TRACER_RDMA_DEBUG
   fprintf(stderr, "RDMA_DEBUG: Task %d has received an RNZ_START message inside MPI_Irecv and is responding with RECV_POST\n", ns->my_pe_num);
 #endif
+          /* Collect RDMA statistics */
+          ns->my_pe->curr_effective_time_diff[t->myEntry.node] = ns->my_pe->curr_effective_time_diff[t->myEntry.node] - tw_now(lp); //Purposely keep the "sign" - this is not a mistake. We want to figure out if the RNZ_START arrived earlier or later than the posting of MPI_Irecv
+	  ns->my_pe->effective_time_diff[t->myEntry.node] += ns->my_pe->curr_effective_time_diff[t->myEntry.node];
 	  respond_to_pending_rnz_start_message(ns, recv_post_msg, lp, t->myEntry.node);
           remove_rnz_start_message(ns, recv_post_msg, t->myEntry.node);
           recvFinishTime += nic_delay;
           
-        }
+        } else { /* Collect RDMA statistics - RNZ_START hasn't arrived */
+	  ns->my_pe->curr_effective_time_diff[t->myEntry.node] = tw_now(lp);
+	}
+
       }
     }
 
