@@ -118,6 +118,7 @@ class PE {
     std::map<int, int> pendingReqs;
     std::map<int, int64_t> pendingRReqs;
     std::map<int64_t, int> reqIdToReceiverMapping; //Gives me the receiver PE id for a given non-blocking request id. Used in RDMA protocol tuning
+    std::map<int64_t, int> reqIdToSenderMapping; //Gives me the receiver PE id for a given non-blocking request id. Used in RDMA protocol tuning
     std::map<int, std::list< MsgKey > > pendingReceivedPostMsgs; //List of arrived RECV_POST post messages corresponding to a request id. 
 
     std::map<MsgKey, int> receiveStatus; //Whether or not the MPI_Recv/MPI_Irecv for a given message has been posted

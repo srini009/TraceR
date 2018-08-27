@@ -1574,6 +1574,12 @@ static tw_stime exec_task(
 
     /* MPI_Irecv */
     if(t->event_id == TRACER_RECV_POST_EVT) {
+
+      /* RDMA statistics */
+
+      ns->my_pe->curr_compute_time_receiver[t->myEntry.node] = tw_now(lp);
+      ns->my_pe->reqIdToSenderMapping[t->req_id] = t->myEntry.node; //Required to grab the sender inside TRACER_RECV_COMP_EVT
+ 
       /* Grab the per-node seq number - this must be constant across the ENTIRE message (control+data message)*/
       seq = ns->my_pe->recvSeq[t->myEntry.node];
       ns->my_pe->pendingRReqs[t->req_id] = seq;
@@ -1659,6 +1665,11 @@ static tw_stime exec_task(
       /*Assert that the receive has indeed been posted for the MPI_Wait, and remove it from list of pending receive requests*/
       std::map<int, int64_t>::iterator it = ns->my_pe->pendingRReqs.find(t->req_id);
       assert(it != ns->my_pe->pendingRReqs.end());
+
+      /*Collect some RDMA statistics*/
+      ns->my_pe->curr_compute_time_receiver[ns->my_pe->reqIdToSenderMapping[t->req_id]] = tw_now(lp) - ns->my_pe->curr_compute_time_receiver[ns->my_pe->reqIdToSenderMapping[t->req_id]];
+      ns->my_pe->avg_compute_time_receiver[ns->my_pe->reqIdToSenderMapping[t->req_id]] += ns->my_pe->curr_compute_time_receiver[ns->my_pe->reqIdToSenderMapping[t->req_id]];
+
       seq = it->second;
       t->myEntry.msgId.seq = seq;
       ns->my_pe->pendingRReqs.erase(it);
