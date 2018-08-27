@@ -789,6 +789,16 @@ static void proc_finalize(
     //Check that we have no pending RNZ_START messages sitting around. If so, that's trouble.
     assert(ns->my_pe->pendingRnzStartMsgList.size() == 0);
 
+    //Finalize RDMA statistics
+    for(int i = 0; i < jobs[ns->my_job].numRanks; i++) {
+      if(ns->my_pe->number_of_messages[i] > 0) {
+        ns->my_pe->avg_compute_time_sender[i] =  ns->my_pe->avg_compute_time_sender[i]/ns->my_pe->number_of_messages[i];
+	ns->my_pe->avg_compute_time_receiver[i] =  ns->my_pe->avg_compute_time_receiver[i]/ns->my_pe->number_of_messages[i];
+	ns->my_pe->avg_data_message_size[i] =  ns->my_pe->avg_data_message_size[i]/ns->my_pe->number_of_messages[i]; 
+        fprintf(stderr, "RDMA_DEBUG: Avg. compute time: %lf, avg. receive time: %lf, avg. data message size: %lf for PE %d with PE %d\n", ns->my_pe->avg_compute_time_sender[i], ns->my_pe->avg_compute_time_receiver[i], ns->my_pe->avg_data_message_size[i], ns->my_pe_num, i);
+      }
+    }
+
     int count = 0;
     std::map<int64_t, std::map<int64_t, std::map<int, int> > >::iterator it =
       ns->my_pe->pendingCollMsgs.begin();
@@ -1898,6 +1908,8 @@ static tw_stime exec_task(
         } else {
           /* Rendezvous */
           taskEntry->msgId.seq = ns->my_pe->sendSeq[node]++;
+
+          /* Collect some RDMA statistics */
           ns->my_pe->curr_compute_time_sender[node] = tw_now(lp); 
           ns->my_pe->avg_data_message_size[node] += MsgEntry_getSize(taskEntry); 
           ns->my_pe->number_of_messages[node]++; 
