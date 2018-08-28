@@ -567,13 +567,16 @@ static void proc_init(
     ns->my_pe->curr_compute_time_receiver = new double[jobs[ns->my_job].numRanks];
     ns->my_pe->effective_time_diff = new double[jobs[ns->my_job].numRanks];
     ns->my_pe->curr_effective_time_diff = new double[jobs[ns->my_job].numRanks];
-    ns->my_pe->avg_data_message_size = new double[jobs[ns->my_job].numRanks];
-    ns->my_pe->number_of_messages = new int64_t[jobs[ns->my_job].numRanks];
+    ns->my_pe->avg_data_message_size_sent = new double[jobs[ns->my_job].numRanks];
+    ns->my_pe->avg_data_message_size_received = new double[jobs[ns->my_job].numRanks];
+    ns->my_pe->number_of_messages_sent = new int64_t[jobs[ns->my_job].numRanks];
+    ns->my_pe->number_of_messages_received = new int64_t[jobs[ns->my_job].numRanks];
 
     for(int i = 0; i < jobs[ns->my_job].numRanks; i++) {
       ns->my_pe->rdma_protocol[i] = RDMA_WRITE; //Set as default
-      ns->my_pe->avg_compute_time_sender[i] = ns->my_pe->curr_compute_time_sender[i] = ns->my_pe->avg_compute_time_receiver[i] = ns->my_pe->curr_compute_time_receiver[i] = ns->my_pe->effective_time_diff[i] = ns->my_pe->curr_effective_time_diff[i] = ns->my_pe->avg_data_message_size[i]  = 0.0;
-      ns->my_pe->number_of_messages[i] = 0;
+      ns->my_pe->avg_compute_time_sender[i] = ns->my_pe->curr_compute_time_sender[i] = ns->my_pe->avg_compute_time_receiver[i] = ns->my_pe->curr_compute_time_receiver[i] = ns->my_pe->effective_time_diff[i] = ns->my_pe->curr_effective_time_diff[i] = ns->my_pe->avg_data_message_size_sent[i] = ns->my_pe->avg_data_message_size_received[i] = 0.0;
+      ns->my_pe->number_of_messages_sent[i] = 0;
+      ns->my_pe->number_of_messages_received[i] = 0;
       ns->my_pe->sendSeq[i] = ns->my_pe->recvSeq[i] = 0;
     }
 
@@ -791,12 +794,17 @@ static void proc_finalize(
 
     //Finalize RDMA statistics
     for(int i = 0; i < jobs[ns->my_job].numRanks; i++) {
-      if(ns->my_pe->number_of_messages[i] > 0) {
-        ns->my_pe->avg_compute_time_sender[i] =  ns->my_pe->avg_compute_time_sender[i]/ns->my_pe->number_of_messages[i];
-	ns->my_pe->avg_compute_time_receiver[i] =  ns->my_pe->avg_compute_time_receiver[i]/ns->my_pe->number_of_messages[i];
-        ns->my_pe->effective_time_diff[i] = ns->my_pe->effective_time_diff[i]/ns->my_pe->number_of_messages[i];
-	ns->my_pe->avg_data_message_size[i] =  ns->my_pe->avg_data_message_size[i]/ns->my_pe->number_of_messages[i];
-        fprintf(stderr, "RDMA_DEBUG: Avg. compute time: %lf, avg. receive time: %lf, effective time diff: %lf, avg. data message size: %lf for PE %d with PE %d\n", ns->my_pe->avg_compute_time_sender[i], ns->my_pe->avg_compute_time_receiver[i], ns->my_pe->effective_time_diff[i], ns->my_pe->avg_data_message_size[i], ns->my_pe_num, i);
+      if(ns->my_pe->number_of_messages_sent[i] > 0) {
+        ns->my_pe->avg_compute_time_sender[i] =  ns->my_pe->avg_compute_time_sender[i]/ns->my_pe->number_of_messages_sent[i];
+	ns->my_pe->avg_data_message_size_sent[i] = ns->my_pe->avg_data_message_size_sent[i]/ns->my_pe->number_of_messages_sent[i];
+        fprintf(stderr, "RDMA_DEBUG: Avg. sender compute time: %lf, avg. data message size sent: %lf for PE %d with PE %d\n", ns->my_pe->avg_compute_time_sender[i], ns->my_pe->avg_data_message_size_sent[i], ns->my_pe_num, i);
+      }
+
+      if(ns->my_pe->number_of_messages_received[i] > 0) {
+	ns->my_pe->avg_compute_time_receiver[i] = ns->my_pe->avg_compute_time_receiver[i]/ns->my_pe->number_of_messages_received[i];
+        ns->my_pe->effective_time_diff[i] = ns->my_pe->effective_time_diff[i]/ns->my_pe->number_of_messages_received[i];
+	ns->my_pe->avg_data_message_size_received[i] = ns->my_pe->avg_data_message_size_received[i]/ns->my_pe->number_of_messages_received[i];
+        fprintf(stderr, "RDMA_DEBUG: Avg. receiver compute time: %lf, effective time diff: %lf, avg. data message size received: %lf for PE %d with PE %d\n", ns->my_pe->avg_compute_time_receiver[i], ns->my_pe->effective_time_diff[i], ns->my_pe->avg_data_message_size_received[i], ns->my_pe_num, i);
       }
     }
 
@@ -1596,7 +1604,8 @@ static tw_stime exec_task(
     if(t->event_id == TRACER_RECV_POST_EVT) {
 
       /* RDMA statistics */
-
+      ns->my_pe->number_of_messages_received[t->myEntry.node]++;
+      ns->my_pe->avg_data_message_size_received[t->myEntry.node] += MsgEntry_getSize(&t->myEntry);
       ns->my_pe->curr_compute_time_receiver[t->myEntry.node] = tw_now(lp);
       ns->my_pe->reqIdToSenderMapping[t->req_id] = t->myEntry.node; //Required to grab the sender inside TRACER_RECV_COMP_EVT
  
@@ -1927,8 +1936,8 @@ static tw_stime exec_task(
 
           /* Collect some RDMA statistics */
           ns->my_pe->curr_compute_time_sender[node] = tw_now(lp); 
-          ns->my_pe->avg_data_message_size[node] += MsgEntry_getSize(taskEntry); 
-          ns->my_pe->number_of_messages[node]++; 
+          ns->my_pe->avg_data_message_size_sent[node] += MsgEntry_getSize(taskEntry); 
+          ns->my_pe->number_of_messages_sent[node]++; 
 
           /*Sender does NOT transfer data right away. 
            *Non-blocking or not, sender just sends a 16-byte "RNZ_START" message here in an Eager manner. 

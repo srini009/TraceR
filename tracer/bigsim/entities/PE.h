@@ -95,8 +95,10 @@ class PE {
     double *curr_compute_time_receiver; //Time diff between MPI_Wait and MPI_Irecv for a receiver in the current message
     double *curr_effective_time_diff; //Time diff between arrival of an RNZ_START and posting of MPI_Irecv
 
-    int64_t *number_of_messages; //Number of messages between a sender-receiver pair
-    double *avg_data_message_size; //Avg. message size for a sender-receiver pair
+    int64_t *number_of_messages_sent; //Number of messages sent by sender in a sender-receiver pair
+    int64_t *number_of_messages_received; //Number of messages received by receiver in a sender-receiver pair
+    double *avg_data_message_size_sent; //Avg. message size sent for sender in a sender-receiver pair
+    double *avg_data_message_size_received; //Avg. message size received for a receiver in sender-receiver pair
 
     bool noUnsatDep(int iter, int tInd);	// there is no unsatisfied dependency for task
     void mark_all_done(int iter, int tInd);
