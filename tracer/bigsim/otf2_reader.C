@@ -18,12 +18,16 @@
 #include "otf2_reader.h"
 #include "CWrapper.h"
 #include <cassert>
+#include <utility>
+#include <map>
 #define VERBOSE_L1 1
 #define VERBOSE_L2 0
 #define VERBOSE_L3 0
 
 extern JobInf *jobs;
 extern tw_stime soft_delay_mpi;
+
+std::map <std::pair<uint32_t, uint32_t>, int> communicating_processes;
 
 static OTF2_CallbackCode
 callbackDefLocations(void*                 userData,
@@ -308,6 +312,10 @@ callbackIsendEvt(OTF2_LocationRef locationID,
   new_task.myEntry.thread = 0;
   new_task.isNonBlocking = true;
   new_task.req_id = requestID;
+  
+  //Used to exchange RDMA statistics data
+  communicating_processes[std::pair<uint32_t, uint32_t>(locationID, receiver)] = communicator;
+ 
 #endif
   ld->lastLogTime = time;
   return OTF2_CALLBACK_SUCCESS;
@@ -389,6 +397,7 @@ callbackIrecv(OTF2_LocationRef locationID,
   new_task.req_id = requestID;
   new_task.isNonBlocking = true;;
   ((AllData *)userData)->matchRecvIds[requestID] = ld->tasks.size() - 1;
+
 #endif
   ld->lastLogTime = time;
   return OTF2_CALLBACK_SUCCESS;
@@ -437,6 +446,9 @@ callbackIrecvCompEvt(OTF2_LocationRef locationID,
   postTask.myEntry.msgId.coll_type = -1;
   postTask.myEntry.node = new_task.myEntry.node;
   ((AllData *)userData)->matchRecvIds.erase(it);
+
+  //Used to exchange RDMA statistics data
+  communicating_processes[std::pair<uint32_t, uint32_t>(sender, locationID)] = communicator;
 #endif
   ld->lastLogTime = time;
   return OTF2_CALLBACK_SUCCESS;
