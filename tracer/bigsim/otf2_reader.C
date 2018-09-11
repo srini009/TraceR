@@ -276,6 +276,9 @@ callbackSendEvt(OTF2_LocationRef locationID,
   new_task.myEntry.node = group.members[receiver];
   new_task.myEntry.thread = 0;
   new_task.isNonBlocking = false;
+  //Used to exchange RDMA statistics data
+  fprintf(stderr, "RDMA_SENDER with %d, %d from %d\n", locationID, receiver, locationID);
+  communicating_processes[std::pair<uint32_t, uint32_t>(locationID, receiver)] = communicator;
 #endif
   ld->lastLogTime = time;
   return OTF2_CALLBACK_SUCCESS;
@@ -314,6 +317,7 @@ callbackIsendEvt(OTF2_LocationRef locationID,
   new_task.req_id = requestID;
   
   //Used to exchange RDMA statistics data
+  fprintf(stderr, "RDMA_SENDER with %d, %d from %d\n", locationID, receiver, locationID);
   communicating_processes[std::pair<uint32_t, uint32_t>(locationID, receiver)] = communicator;
  
 #endif
@@ -372,6 +376,9 @@ callbackRecvEvt(OTF2_LocationRef locationID,
   new_task.myEntry.node = group.members[sender];
   new_task.myEntry.thread = 0;
   new_task.isNonBlocking = false;
+  //Used to exchange RDMA statistics data
+  fprintf(stderr, "RDMA_RECEIVER with %d, %d from %d\n", locationID, sender, locationID);
+  communicating_processes[std::pair<uint32_t, uint32_t>(locationID, sender)] = communicator;
 #endif
   ld->lastLogTime = time;
   return OTF2_CALLBACK_SUCCESS;
@@ -448,7 +455,8 @@ callbackIrecvCompEvt(OTF2_LocationRef locationID,
   ((AllData *)userData)->matchRecvIds.erase(it);
 
   //Used to exchange RDMA statistics data
-  communicating_processes[std::pair<uint32_t, uint32_t>(sender, locationID)] = communicator;
+  fprintf(stderr, "RDMA_RECEIVER with %d, %d from %d\n", locationID, sender, locationID);
+  communicating_processes[std::pair<uint32_t, uint32_t>(locationID, sender)] = communicator;
 #endif
   ld->lastLogTime = time;
   return OTF2_CALLBACK_SUCCESS;
@@ -649,6 +657,42 @@ OTF2_Reader * readGlobalDefinitions(int jobID, char* tracefileName, AllData *all
   return reader;
 }
 
+void addTasksToExchangeRDMAStatistics(LocationData* ld) 
+
+{
+  for(std::map<std::pair<uint32_t, uint32_t>, int>::iterator it = communicating_processes.begin(); it != communicating_processes.end();it++)
+    {
+      //Add tasks
+      fprintf(stderr, "Adding entry for sender: %d and receiver %d\n", (it->first).first, (it->first).second);
+
+      ld->tasks.push_back(Task());
+      Task &new_sender_task = ld->tasks[ld->tasks.size() - 1];
+      new_sender_task.execTime = soft_delay_mpi;
+      new_sender_task.event_id = TRACER_SEND_RDMA_DATA_EVT;
+      new_sender_task.myEntry.msgId.pe = (it->first).first;
+      new_sender_task.myEntry.msgId.id = 10000; //Some high value
+      new_sender_task.myEntry.msgId.size = 8;
+      new_sender_task.myEntry.msgId.comm = it->second;
+      new_sender_task.myEntry.msgId.coll_type = -1;
+      new_sender_task.myEntry.node = (it->first).second;
+      new_sender_task.myEntry.thread = 0;
+      new_sender_task.isNonBlocking = false;
+
+      ld->tasks.push_back(Task());
+      Task &new_receiver_task = ld->tasks[ld->tasks.size() - 1];
+      new_receiver_task.execTime = soft_delay_mpi;
+      new_receiver_task.event_id = TRACER_RECV_RDMA_DATA_EVT;
+      new_receiver_task.myEntry.msgId.pe = (it->first).first;
+      new_receiver_task.myEntry.msgId.id = 10000; //Some high value
+      new_receiver_task.myEntry.msgId.size = 8;
+      new_receiver_task.myEntry.msgId.comm = it->second;
+      new_receiver_task.myEntry.msgId.coll_type = -1;
+      new_receiver_task.myEntry.node = (it->first).second;
+      new_receiver_task.myEntry.thread = 0;
+      new_receiver_task.isNonBlocking = false;
+    }
+}
+
 void readLocationTasks(int jobID, OTF2_Reader *reader, AllData *allData, 
     uint32_t loc, LocationData* ld)
 {
@@ -665,6 +709,8 @@ void readLocationTasks(int jobID, OTF2_Reader *reader, AllData *allData,
       OTF2_Reader_CloseDefReader( reader, def_reader );
     }
   }
+  communicating_processes.clear();
+
   OTF2_EvtReader* evt_reader =
     OTF2_Reader_GetEvtReader( reader, locations[ loc ] );
   OTF2_EvtReaderCallbacks* event_callbacks = OTF2_EvtReaderCallbacks_New();
@@ -690,7 +736,7 @@ void readLocationTasks(int jobID, OTF2_Reader *reader, AllData *allData,
       event_callbacks, &callbackCollectiveEnd);
   OTF2_EvtReaderCallbacks_SetMeasurementOnOffCallback(
       event_callbacks, &callbackMeasurement);
-  
+ 
   allData->ld = ld;
   ld->lastLogTime = 0;
   ld->firstEnter = true;
@@ -709,6 +755,8 @@ void readLocationTasks(int jobID, OTF2_Reader *reader, AllData *allData,
         ld->tasks[e].event_id, ld->tasks[e].execTime);
   }
 #endif
+  //Add some additional tasks that are related to exchanging of RDMA statistics data
+  addTasksToExchangeRDMAStatistics(ld);
   OTF2_Reader_CloseEvtReader( reader, evt_reader );
 }
 

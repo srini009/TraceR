@@ -43,7 +43,9 @@ enum Tracer_evt_type {
   TRACER_SEND_COMP_EVT = -6,
   TRACER_RECV_POST_EVT = -7,
   TRACER_RECV_COMP_EVT = -8,
-  TRACER_LOOP_EVT = -9
+  TRACER_LOOP_EVT = -9,
+  TRACER_SEND_RDMA_DATA_EVT = -10,
+  TRACER_RECV_RDMA_DATA_EVT = -11
 };
 
 struct ClockProperties {

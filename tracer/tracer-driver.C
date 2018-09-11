@@ -1755,6 +1755,15 @@ static tw_stime exec_task(
     }
    
     if(regular_receive_and_not_received_message) return 0; /*Wait*/
+
+    if(t->event_id == TRACER_RECV_RDMA_DATA_EVT) {
+       fprintf(stderr, "RDMA_DEBUG: PE %d needs to execute TRACER_RECV_RDMA_DATA_EVT\n", ns->my_pe_num);
+    }
+
+    if(t->event_id == TRACER_SEND_RDMA_DATA_EVT) {
+       fprintf(stderr, "RDMA_DEBUG: PE %d needs to execute TRACER_SEND_RDMA_DATA_EVT\n", ns->my_pe_num);
+    }
+    
 #endif
 
     //Executing the task, set the pe as busy
