@@ -1754,16 +1754,29 @@ static tw_stime exec_task(
       }
     }
    
-    if(regular_receive_and_not_received_message) return 0; /*Wait*/
+    if (t->event_id == TRACER_RECV_RDMA_DATA_EVT && !PE_noMsgDep(ns->my_pe, task_id.iter, task_id.taskid)) {
+      seq = ns->my_pe->recvSeq[t->myEntry.node];
 
-    if(t->event_id == TRACER_RECV_RDMA_DATA_EVT) {
+      MsgKey key(t->myEntry.node, t->myEntry.msgId.id, t->myEntry.msgId.comm, seq);
+      ns->my_pe->recvSeq[t->myEntry.node]++;
+      ns->my_pe->receiveStatus[key] = 1; //Mark that receive has been posted
+
+      KeyType::iterator it = ns->my_pe->pendingMsgs.find(key);
+      
+      if(it == ns->my_pe->pendingMsgs.end()) {
+        assert(PE_is_busy(ns->my_pe) == false);
+        ns->my_pe->pendingMsgs[key].push_back(task_id.taskid);
+        regular_receive_and_not_received_message = true;
+      } else { 
+        assert(it->second.front() == -1);
+        ns->my_pe->pendingMsgs[key].pop_front();
+        assert(it->second.size() == 0);
+        ns->my_pe->pendingMsgs.erase(it);
+      }
        fprintf(stderr, "RDMA_DEBUG: PE %d needs to execute TRACER_RECV_RDMA_DATA_EVT\n", ns->my_pe_num);
     }
 
-    if(t->event_id == TRACER_SEND_RDMA_DATA_EVT) {
-       fprintf(stderr, "RDMA_DEBUG: PE %d needs to execute TRACER_SEND_RDMA_DATA_EVT\n", ns->my_pe_num);
-    }
-    
+    if(regular_receive_and_not_received_message) return 0; /*Wait*/
 #endif
 
     //Executing the task, set the pe as busy
@@ -1913,11 +1926,15 @@ static tw_stime exec_task(
     double sendFinishTime = 0;
 
     /* Triggered with MPI_Send or MPI_Isend */
-    if(t->event_id == TRACER_SEND_EVT) {
+    if((t->event_id == TRACER_SEND_EVT) || (t->event_id == TRACER_SEND_RDMA_DATA_EVT)) {
       MsgEntry *taskEntry = &t->myEntry;
       bool isCopying = true;
       tw_stime copyTime = copy_per_byte * MsgEntry_getSize(taskEntry);
       int node = MsgEntry_getNode(taskEntry);
+
+      if(t->event_id == TRACER_SEND_RDMA_DATA_EVT)
+        fprintf(stderr, "RDMA_DEBUG: PE %d needs to execute TRACER_SEND_RDMA_DATA_EVT\n", ns->my_pe_num);
+
       if(MsgEntry_getSize(taskEntry) > eager_limit && node != ns->my_pe_num) {
         copyTime = soft_latency;
         isCopying = false;
