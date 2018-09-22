@@ -662,9 +662,7 @@ void addTasksToExchangeRDMAStatistics(LocationData* ld)
 {
   for(std::map<std::pair<uint32_t, uint32_t>, int>::iterator it = communicating_processes.begin(); it != communicating_processes.end();it++)
     {
-      //Add tasks
-      fprintf(stderr, "Adding entry for sender: %d and receiver %d\n", (it->first).first, (it->first).second);
-
+      //Add send tasks first to prevent deadlock
       ld->tasks.push_back(Task());
       Task &new_sender_task = ld->tasks[ld->tasks.size() - 1];
       new_sender_task.execTime = soft_delay_mpi;
@@ -677,7 +675,10 @@ void addTasksToExchangeRDMAStatistics(LocationData* ld)
       new_sender_task.myEntry.node = (it->first).second;
       new_sender_task.myEntry.thread = 0;
       new_sender_task.isNonBlocking = false;
+    }
 
+  for(std::map<std::pair<uint32_t, uint32_t>, int>::iterator it = communicating_processes.begin(); it != communicating_processes.end();it++)
+   {
       ld->tasks.push_back(Task());
       Task &new_receiver_task = ld->tasks[ld->tasks.size() - 1];
       new_receiver_task.execTime = soft_delay_mpi;
@@ -690,7 +691,7 @@ void addTasksToExchangeRDMAStatistics(LocationData* ld)
       new_receiver_task.myEntry.node = (it->first).second;
       new_receiver_task.myEntry.thread = 0;
       new_receiver_task.isNonBlocking = false;
-    }
+   }
 }
 
 void readLocationTasks(int jobID, OTF2_Reader *reader, AllData *allData, 
