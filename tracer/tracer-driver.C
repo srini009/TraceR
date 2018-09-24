@@ -623,6 +623,9 @@ static void proc_event(
     case RECV_MSG:
       handle_recv_event(ns, b, m, lp);
       break;
+    case RECV_RDMA_DATA_MSG:
+      handle_recv_rdma_data_event(ns, b, m, lp);
+      break;
     case BCAST:
       handle_bcast_event(ns, b, m, lp);
       break;
@@ -901,6 +904,127 @@ static void handle_local_rev_event(
 	       proc_msg * m,
 	       tw_lp * lp)
 { }
+
+static void handle_recv_rdma_data_event(
+    proc_state * ns,
+    tw_bf * b,
+    proc_msg * m,
+    tw_lp * lp)
+{
+    int task_id;
+
+#if TRACER_BIGSIM_TRACES
+    task_id = PE_findTaskFromMsg(ns->my_pe, &m->msgId);
+#else
+#if DEBUG_PRINT
+    if(ns->my_pe_num == 1024 || ns->my_pe_num == 11788) {
+    printf("%d RECD MSG: %d %d %d %lld\n", 
+        ns->my_pe_num, m->msgId.pe, m->msgId.id, m->msgId.comm,
+        m->msgId.seq);
+    }
+#endif
+    MsgKey key(m->msgId.pe, m->msgId.id, m->msgId.comm, m->msgId.seq);
+    KeyType::iterator it = ns->my_pe->pendingMsgs.find(key);
+
+#ifdef TRACER_RDMA_DEBUG
+  fprintf(stderr, "RDMA_DEBUG: Task %d received a data message from %d\n", ns->my_pe_num, m->msgId.pe);
+#endif
+    assert((it == ns->my_pe->pendingMsgs.end()) || (it->second.size() != 0));
+    if(it == ns->my_pe->pendingMsgs.end() || it->second.front() == -1) {
+
+#ifdef TRACER_RDMA_DEBUG_CRITICAL
+  fprintf(stderr, "RDMA_DEBUG: Task %d has received message and hasn't posted an MPI_Wait or MPI_Recv yet\n", ns->my_pe_num);
+#endif
+      task_id = -1;
+      ns->my_pe->pendingMsgs[key].push_back(task_id);
+      b->c2 = 1;
+      return;
+    } else {
+
+#ifdef TRACER_RDMA_DEBUG_CRITICAL
+  fprintf(stderr, "RDMA_DEBUG: Message delivered to task %d\n", ns->my_pe_num);
+#endif
+      b->c3 = 1;
+      task_id = it->second.front();
+      it->second.pop_front();
+      if(it->second.size() == 0) {
+        ns->my_pe->pendingMsgs.erase(it);
+      }
+#if DEBUG_PRINT
+      printf("[%d:%d] RECD MSG FOUND TASK: %d %d %d %d - %d\n", ns->my_job,
+          ns->my_pe_num, m->msgId.pe, m->msgId.id, m->msgId.comm,
+          ns->my_pe->recvSeq[m->msgId.pe], task_id);
+#endif
+    }
+#endif
+    int iter = m->iteration;
+#if DEBUG_PRINT
+    tw_stime now = tw_now(lp);
+    printf("PE%d: handle_recv_rdma_data_event - received from %d id: %d for task: "
+        "%d. TIME now:%f.\n", ns->my_pe_num, m->msgId.pe, m->msgId.id,
+        task_id, now);
+#endif
+    bool isBusy = PE_is_busy(ns->my_pe);
+
+#if TRACER_BIGSIM_TRACES
+    if(task_id >= 0 && PE_noMsgDep(ns->my_pe, iter, task_id)) {
+      m->executed.taskid = -2;
+      return;
+    }
+#endif
+#if TRACER_OTF_TRACES
+    if(task_id == -1) {
+      b->c4 = 1;
+      return;
+    }
+#endif
+#if DEBUG_PRINT
+    if(1 || ns->my_pe_num == 1024 || ns->my_pe_num == 11788) {
+    printf("%d Recv  busy %d %d\n", ns->my_pe_num, isBusy, task_id);
+    }
+#endif
+    m->incremented_flag = isBusy;
+    m->executed.taskid = -1;
+    if(task_id>=0){
+        //The matching task should not be already done
+        if(PE_get_taskDone(ns->my_pe,iter,task_id)){ //TODO: check this
+          printf("[%d:%d] WARNING: MSG RECV TASK IS DONE: %d\n", ns->my_job,
+              ns->my_pe_num, task_id);
+            assert(0);
+        }
+        PE_invertMsgPe(ns->my_pe, iter, task_id);
+        if(m->msgId.size <= eager_limit && ns->my_pe->currIter == 0) {
+          b->c1 = 1;
+          if(m->msgId.pe != ns->my_pe_num) {
+            PE_addTaskExecTime(ns->my_pe, task_id, nic_delay);
+          }
+          PE_addTaskExecTime(ns->my_pe, task_id, m->msgId.size * copy_per_byte);
+        }
+        //Add task to the task buffer
+        TaskPair pair;
+        pair.iter = iter; pair.taskid = task_id;
+        PE_addToBuffer(ns->my_pe, &pair);
+
+        //Check if pe is busy, if not we can execute the next available task in the buffer
+        //else do nothing
+#if TRACER_OTF_TRACES
+        assert(!isBusy);
+#endif
+        if(!isBusy){
+            TaskPair buffd_task = PE_getNextBuffedMsg(ns->my_pe);
+            //Store the executed_task id for reverse handler msg
+            m->executed = buffd_task;
+            m->fwd_dep_count = 0;
+            if(buffd_task.taskid != -1){
+                exec_task(ns, buffd_task, lp, m, b);
+            }
+        }
+        return;
+    }
+    printf("PE%d: Going beyond hash look up on receiving a message %d:%d\n",
+      lpid_to_pe(lp->gid), m->msgId.pe, m->msgId.id);
+    assert(0);
+}
 
 static void handle_recv_event(
     proc_state * ns,
@@ -1773,7 +1897,6 @@ static tw_stime exec_task(
         assert(it->second.size() == 0);
         ns->my_pe->pendingMsgs.erase(it);
       }
-       fprintf(stderr, "RDMA_DEBUG: PE %d needs to execute TRACER_RECV_RDMA_DATA_EVT\n", ns->my_pe_num);
     }
 
     if(regular_receive_and_not_received_message) return 0; /*Wait*/
@@ -1933,7 +2056,6 @@ static tw_stime exec_task(
       int node = MsgEntry_getNode(taskEntry);
 
       if(t->event_id == TRACER_SEND_RDMA_DATA_EVT)
-        fprintf(stderr, "RDMA_DEBUG: PE %d needs to execute TRACER_SEND_RDMA_DATA_EVT\n", ns->my_pe_num);
 
       if(MsgEntry_getSize(taskEntry) > eager_limit && node != ns->my_pe_num) {
         copyTime = soft_latency;
@@ -1951,10 +2073,18 @@ static tw_stime exec_task(
         if(isCopying) {
           m->model_net_calls++;
           /*Eager - blocking or non-blocking - send out the data immediately. Trigger a RECV_MSG event on receiver side*/
-          send_msg(ns, MsgEntry_getSize(taskEntry),
-              task_id.iter, &taskEntry->msgId, ns->my_pe->sendSeq[node]++,
-              pe_to_lpid(node, ns->my_job), sendOffset+copyTime+nic_delay+delay, 
-              RECV_MSG, lp);
+          if(t->event_id == TRACER_SEND_RDMA_DATA_EVT) {
+             send_msg(ns, MsgEntry_getSize(taskEntry),
+                 task_id.iter, &taskEntry->msgId, ns->my_pe->sendSeq[node]++,
+                 pe_to_lpid(node, ns->my_job), sendOffset+copyTime+nic_delay+delay, 
+                 RECV_RDMA_DATA_MSG, lp);
+          } else {
+             send_msg(ns, MsgEntry_getSize(taskEntry),
+                 task_id.iter, &taskEntry->msgId, ns->my_pe->sendSeq[node]++,
+                 pe_to_lpid(node, ns->my_job), sendOffset+copyTime+nic_delay+delay, 
+                 RECV_MSG, lp);
+          }
+
           sendFinishTime = sendOffset+copyTime;
         } else {
           /* Rendezvous */
@@ -2202,6 +2332,10 @@ static int send_msg(
         }
         m_remote.msgId.pe = msgId->pe;
         m_remote.msgId.id = msgId->id;
+        if(evt_type == RECV_RDMA_DATA_MSG) {
+          m_remote.msgId.rdma_data = ns->my_pe->curr_compute_time_receiver[dest_id];
+        }
+
 #if TRACER_OTF_TRACES
         m_remote.msgId.comm = msgId->comm;
         m_remote.msgId.seq = seq;

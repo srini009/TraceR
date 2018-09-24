@@ -54,6 +54,7 @@ enum proc_event
     KICKOFF=1,    /* initial event */
     LOCAL,      /* local event */
     RECV_MSG,   /* bigsim, when received a message */
+    RECV_RDMA_DATA_MSG,
     BCAST,      /* broadcast --> to be deprecated */
     EXEC_COMPLETE,   /* bigsim, when completed an execution */
     RNZ_START,
@@ -120,6 +121,11 @@ static void handle_local_event(
     proc_msg * m,
    tw_lp * lp);
 static void handle_recv_event(
+    proc_state * ns,
+    tw_bf * b,
+    proc_msg * m,
+   tw_lp * lp);
+static void handle_recv_rdma_data_event(
     proc_state * ns,
     tw_bf * b,
     proc_msg * m,

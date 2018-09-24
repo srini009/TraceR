@@ -277,7 +277,6 @@ callbackSendEvt(OTF2_LocationRef locationID,
   new_task.myEntry.thread = 0;
   new_task.isNonBlocking = false;
   //Used to exchange RDMA statistics data
-  fprintf(stderr, "RDMA_SENDER with %d, %d from %d\n", locationID, receiver, locationID);
   communicating_processes[std::pair<uint32_t, uint32_t>(locationID, receiver)] = communicator;
 #endif
   ld->lastLogTime = time;
@@ -317,7 +316,6 @@ callbackIsendEvt(OTF2_LocationRef locationID,
   new_task.req_id = requestID;
   
   //Used to exchange RDMA statistics data
-  fprintf(stderr, "RDMA_SENDER with %d, %d from %d\n", locationID, receiver, locationID);
   communicating_processes[std::pair<uint32_t, uint32_t>(locationID, receiver)] = communicator;
  
 #endif
@@ -377,7 +375,6 @@ callbackRecvEvt(OTF2_LocationRef locationID,
   new_task.myEntry.thread = 0;
   new_task.isNonBlocking = false;
   //Used to exchange RDMA statistics data
-  fprintf(stderr, "RDMA_RECEIVER with %d, %d from %d\n", locationID, sender, locationID);
   communicating_processes[std::pair<uint32_t, uint32_t>(locationID, sender)] = communicator;
 #endif
   ld->lastLogTime = time;
@@ -455,7 +452,6 @@ callbackIrecvCompEvt(OTF2_LocationRef locationID,
   ((AllData *)userData)->matchRecvIds.erase(it);
 
   //Used to exchange RDMA statistics data
-  fprintf(stderr, "RDMA_RECEIVER with %d, %d from %d\n", locationID, sender, locationID);
   communicating_processes[std::pair<uint32_t, uint32_t>(locationID, sender)] = communicator;
 #endif
   ld->lastLogTime = time;

@@ -38,6 +38,7 @@ struct MsgID {
 #if TRACER_OTF_TRACES
     int comm, coll_type;
     int64_t seq;
+    double rdma_data;
 #endif
 };
 
