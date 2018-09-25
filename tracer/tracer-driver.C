@@ -565,6 +565,7 @@ static void proc_init(
     ns->my_pe->curr_compute_time_sender = new double[jobs[ns->my_job].numRanks];
     ns->my_pe->avg_compute_time_receiver = new double[jobs[ns->my_job].numRanks];
     ns->my_pe->avg_compute_time_opposite_receiver = new double[jobs[ns->my_job].numRanks];
+    ns->my_pe->avg_effective_time_opposite_receiver = new double[jobs[ns->my_job].numRanks];
     ns->my_pe->curr_compute_time_receiver = new double[jobs[ns->my_job].numRanks];
     ns->my_pe->effective_time_diff = new double[jobs[ns->my_job].numRanks];
     ns->my_pe->curr_effective_time_diff = new double[jobs[ns->my_job].numRanks];
@@ -575,7 +576,7 @@ static void proc_init(
 
     for(int i = 0; i < jobs[ns->my_job].numRanks; i++) {
       ns->my_pe->rdma_protocol[i] = RDMA_WRITE; //Set as default
-      ns->my_pe->avg_compute_time_sender[i] = ns->my_pe->curr_compute_time_sender[i] = ns->my_pe->avg_compute_time_receiver[i] = ns->my_pe->curr_compute_time_receiver[i] = ns->my_pe->effective_time_diff[i] = ns->my_pe->curr_effective_time_diff[i] = ns->my_pe->avg_data_message_size_sent[i] = ns->my_pe->avg_data_message_size_received[i] = ns->my_pe->avg_compute_time_opposite_receiver[i] = 0.0;
+      ns->my_pe->avg_compute_time_sender[i] = ns->my_pe->curr_compute_time_sender[i] = ns->my_pe->avg_compute_time_receiver[i] = ns->my_pe->curr_compute_time_receiver[i] = ns->my_pe->effective_time_diff[i] = ns->my_pe->curr_effective_time_diff[i] = ns->my_pe->avg_data_message_size_sent[i] = ns->my_pe->avg_data_message_size_received[i] = ns->my_pe->avg_compute_time_opposite_receiver[i] = ns->my_pe->avg_effective_time_opposite_receiver[i] = 0.0;
       ns->my_pe->number_of_messages_sent[i] = 0;
       ns->my_pe->number_of_messages_received[i] = 0;
       ns->my_pe->sendSeq[i] = ns->my_pe->recvSeq[i] = 0;
@@ -919,6 +920,7 @@ static void handle_recv_rdma_data_event(
     int task_id;
 
     ns->my_pe->avg_compute_time_opposite_receiver[m->msgId.pe] = m->msgId.rdma_data;
+    ns->my_pe->avg_effective_time_opposite_receiver[m->msgId.pe] = m->msgId.rdma_rnz_receipt_data;
     #ifdef TRACER_RDMA_DEBUG
     fprintf(stderr, "PE %d ADDING: %lf\n", ns->my_pe_num, ns->my_pe->avg_compute_time_opposite_receiver[m->msgId.pe]);
     #endif
@@ -2346,10 +2348,19 @@ static int send_msg(
         m_remote.msgId.pe = msgId->pe;
         m_remote.msgId.id = msgId->id;
         if(evt_type == RECV_RDMA_DATA_MSG) {
-	  #ifdef TRACER_RDMA_DEBUG
-          fprintf(stderr, "PE %d SENDING %lf to %d \n", ns->my_pe_num, (ns->my_pe->avg_compute_time_receiver[dest_id])/(ns->my_pe->number_of_messages_received[dest_id]), dest_id);
-          #endif
-          m_remote.msgId.rdma_data = (ns->my_pe->avg_compute_time_receiver[dest_id])/(ns->my_pe->number_of_messages_received[dest_id]);
+          if(ns->my_pe->number_of_messages_received[dest_id]) {
+      	    #ifdef TRACER_RDMA_DEBUG
+            fprintf(stderr, "PE %d SENDING %lf and %lf to %d \n", ns->my_pe_num, (ns->my_pe->avg_compute_time_receiver[dest_id])/(ns->my_pe->number_of_messages_received[dest_id]), (ns->my_pe->effective_time_diff[dest_id])/(ns->my_pe->number_of_messages_received[dest_id]), dest_id);
+            #endif
+            m_remote.msgId.rdma_data = (ns->my_pe->avg_compute_time_receiver[dest_id])/(ns->my_pe->number_of_messages_received[dest_id]);
+            m_remote.msgId.rdma_rnz_receipt_data = (ns->my_pe->effective_time_diff[dest_id])/(ns->my_pe->number_of_messages_received[dest_id]);
+          } else {
+      	    #ifdef TRACER_RDMA_DEBUG
+            fprintf(stderr, "PE %d SENDING %lf and %lf to %d \n", ns->my_pe_num, 0.00, 0.00, dest_id);
+            #endif
+            m_remote.msgId.rdma_data = 0.0;
+            m_remote.msgId.rdma_rnz_receipt_data = 0.0;
+          }
           dest_id = pe_to_lpid(dest_id, ns->my_job);
         }
 

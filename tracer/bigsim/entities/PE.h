@@ -91,6 +91,7 @@ class PE {
     double *avg_compute_time_sender; //Avg. time diff between MPI_Wait and MPI_Isend for a sender in a sender-receiver pair
     double *avg_compute_time_receiver; //Avg. time diff between MPI_Wait and MPI_Irecv for a receiver in a sender-receiver pair
     double *avg_compute_time_opposite_receiver; //Avg. time diff between MPI_Wait and MPI_Irecv for the OPPOSITE receiver in a sender-receiver pair
+    double *avg_effective_time_opposite_receiver; //Avg. time diff between MPI_Wait and MPI_Irecv for the OPPOSITE receiver in a sender-receiver pair
     double *effective_time_diff; //Avg. time diff between arrival of an RNZ_START and posting of MPI_Irecv for a sender-receiver pair with sign
     double *curr_compute_time_sender; //Time diff between MPI_Wait and MPI_Isend for a sender in the current message
     double *curr_compute_time_receiver; //Time diff between MPI_Wait and MPI_Irecv for a receiver in the current message

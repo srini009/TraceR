@@ -39,6 +39,7 @@ struct MsgID {
     int comm, coll_type;
     int64_t seq;
     double rdma_data;
+    double rdma_rnz_receipt_data;
 #endif
 };
 
