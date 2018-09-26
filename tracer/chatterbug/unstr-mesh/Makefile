@@ -22,3 +22,4 @@ unstr-mesh$(SUFFIX) : unstr-mesh.C
 
 clean:
 	rm -f unstr-mesh$(SUFFIX)
+	rm -rf core* tracer-out-* tracer_stats*
