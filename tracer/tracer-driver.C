@@ -2141,14 +2141,15 @@ static tw_stime exec_task(
           KeyType::iterator it = ns->my_pe->pendingRMsgs.find(key); //Just for correctness. We should not find the message!
           /*Non-blocking or not, add the control messages to list of pendingRMsgs
            *There is no chance that pendingRMsgs is already received before RNZ_START is sent out*/
-          assert(ns->my_pe->pendingRMsgs[key].size() == 0);
+          assert(it == ns->my_pe->pendingRMsgs.end());
         
           /* Send out the control message */
           send_msg(ns, 16,
               task_id.iter, &taskEntry->msgId, taskEntry->msgId.seq,
               pe_to_lpid(node, ns->my_job), sendOffset+copyTime+nic_delay+delay, 
               RNZ_START, lp);
-        
+       
+          
           ns->my_pe->pendingRMsgs[key].push_back(task_id.taskid);
 
           /*If non-blocking, then add request to pending requests.*/ 
