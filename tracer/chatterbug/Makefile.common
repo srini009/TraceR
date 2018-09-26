@@ -1,0 +1,27 @@
+##############################################################################
+# Copyright (c) 2018, Lawrence Livermore National Security, LLC.
+# Produced at the Lawrence Livermore National Laboratory.
+#
+# Written by:
+#     Nikhil Jain <nikhil.jain@acm.org>
+#     Abhinav Bhatele <bhatele@llnl.gov>
+#
+# LLNL-CODE-756471. All rights reserved.
+#
+# This file is part of Chatterbug. For details, see:
+# https://github.com/LLNL/chatterbug
+# Please also read the LICENSE file for the MIT License notice.
+##############################################################################
+
+ifeq ($(WITH_OTF2),YES)
+# enable OTF2 tracing
+	SCOREP_PREFIX	= scorep --user --nocompiler --noopenmp --nopomp --nocuda --noopenacc --noopencl --nomemory
+	SCOREP_FLAGS	= -DWRITE_OTF2_TRACE=1 -DSCOREP_USER_ENABLE -I${SCOREP_INSTALL}/include/scorep
+	SUFFIX	= .otf2
+else
+	SUFFIX	= .x
+endif
+
+MPICXX	= mpicxx
+CXX		= $(SCOREP_PREFIX) $(MPICXX)
+CXXFLAGS= -O3 $(SCOREP_FLAGS)
