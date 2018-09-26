@@ -2,9 +2,7 @@
 #include<stdlib.h>
 #include<mpi.h>
 
-#if WRITE_OTF2_TRACE
 #include <scorep/SCOREP_User.h>
-#endif
 
 #include "microbenchmarks.h"
 
@@ -95,14 +93,20 @@ main(int argc, char **argv) {
 
 	if(my_rank == 1) {
 	//Send
+	SCOREP_USER_REGION_BY_NAME_BEGIN("TRACER_WallTime_WAIT", SCOREP_USER_REGION_TYPE_COMMON);
                 compute(WAIT_TIME);
+        SCOREP_USER_REGION_BY_NAME_END("TRACER_WallTime_WAIT");
 		MPI_Isend(buffer, DATA_SIZE, MPI_INT, 0, 123, MPI_COMM_WORLD, &req);
+	SCOREP_USER_REGION_BY_NAME_BEGIN("TRACER_WallTime_COMPUTE", SCOREP_USER_REGION_TYPE_COMMON);
 		compute(COMPUTE_TIME);
+        SCOREP_USER_REGION_BY_NAME_END("TRACER_WallTime_COMPUTE");
 		MPI_Wait(&req, &stat);
 	} else if(my_rank == 0) {
 	//Recv
 		MPI_Irecv(buffer, DATA_SIZE, MPI_INT, 1, 123, MPI_COMM_WORLD, &req2);
+	SCOREP_USER_REGION_BY_NAME_BEGIN("TRACER_WallTime_COMPUTE", SCOREP_USER_REGION_TYPE_COMMON);
                 compute(COMPUTE_TIME);
+        SCOREP_USER_REGION_BY_NAME_END("TRACER_WallTime_COMPUTE");
                 MPI_Wait(&req2, &stat2);
 	}
 

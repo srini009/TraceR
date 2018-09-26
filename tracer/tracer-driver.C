@@ -687,6 +687,22 @@ static void proc_event(
   }
 }
 
+static void perform_rdma_tuning(
+    proc_state * ns,
+    tw_lp * lp) {
+   for(int i = 0; i < jobs[ns->my_job].numRanks; i++) {
+   //ns->my_pe->avg_compute_time_sender[i], 
+   //ns->my_pe->avg_data_message_size_sent,
+   //ns->my_pe->avg_compute_time_opposite_receiver,
+   //ns->my_pe->avg_effective_time_opposite_receiver,
+
+   /*Detect CASE 1 of microbenchmarks*/
+     if((ns->my_pe->avg_effective_time_opposite_receiver[i] >= ns->my_pe->avg_compute_time_opposite_receiver[i]) && (copy_per_byte*ns->my_pe->avg_data_message_size_sent[i] < ns->my_pe->avg_compute_time_sender[i])) {
+       fprintf(stderr, "CASE 1: Optimal protocol between sender %d and receiver %d is RDMA_READ with eff. time %lf, recv.time %lf, and send. time %lf\n", ns->my_pe_num, i, ns->my_pe->avg_effective_time_opposite_receiver[i], ns->my_pe->avg_compute_time_opposite_receiver[i], ns->my_pe->avg_compute_time_sender[i]);
+     }    
+   }
+}
+
 static void proc_rev_event(
     proc_state * ns,
     tw_bf * b,
@@ -816,6 +832,9 @@ static void proc_finalize(
 	#endif
       }
     }
+
+    /*RDMA tuning logic, based on collected statistic data*/
+    perform_rdma_tuning(ns, lp);
 
     int count = 0;
     std::map<int64_t, std::map<int64_t, std::map<int, int> > >::iterator it =
