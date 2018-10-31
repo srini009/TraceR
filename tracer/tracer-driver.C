@@ -575,7 +575,7 @@ static void proc_init(
     ns->my_pe->number_of_messages_received = new int64_t[jobs[ns->my_job].numRanks];
 
     for(int i = 0; i < jobs[ns->my_job].numRanks; i++) {
-      ns->my_pe->rdma_protocol[i] = RDMA_WRITE; //Set as default
+      ns->my_pe->rdma_protocol[i] = RDMA_READ; //Set as default
       ns->my_pe->avg_compute_time_sender[i] = ns->my_pe->curr_compute_time_sender[i] = ns->my_pe->avg_compute_time_receiver[i] = ns->my_pe->curr_compute_time_receiver[i] = ns->my_pe->effective_time_diff[i] = ns->my_pe->curr_effective_time_diff[i] = ns->my_pe->avg_data_message_size_sent[i] = ns->my_pe->avg_data_message_size_received[i] = ns->my_pe->avg_compute_time_opposite_receiver[i] = ns->my_pe->avg_effective_time_opposite_receiver[i] = 0.0;
       ns->my_pe->number_of_messages_sent[i] = 0;
       ns->my_pe->number_of_messages_received[i] = 0;
