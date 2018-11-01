@@ -2,61 +2,10 @@
 #include<stdlib.h>
 #include<mpi.h>
 
+#if WRITE_OTF2_TRACE
 #include <scorep/SCOREP_User.h>
-
+#endif
 #include "microbenchmarks.h"
-
-#define DIM 25
-static float **a = NULL, *x = NULL, *y = NULL;
-
-void
-init_arrays()
-{
-    int i = 0, j = 0;
-
-    if (a == NULL) {
-        a = malloc(DIM * sizeof(float *));
-        for (i = 0; i < DIM; i++) {
-            a[i] = malloc(DIM * sizeof(float));
-        }
-    }
-
-    if (x == NULL) {
-        x = malloc(DIM * sizeof(float));
-    }
-    if (y == NULL) {
-        y = malloc(DIM * sizeof(float));
-    }
-
-    for (i = 0; i < DIM; i++) {
-        x[i] = y[i] = 1.0f;
-        for (j = 0; j < DIM; j++) {
-            a[i][j] = 2.0f;
-        }
-    }
-}
-
-void
-compute_on_host()
-{
-    int i = 0, j = 0;
-    for (i = 0; i < DIM; i++)
-        for (j = 0; j < DIM; j++)
-            x[i] = x[i] + a[i][j]*a[j][i] + y[j];
-}
-
-static inline void
-compute(double target_seconds)
-{
-    double t1 = 0.0, t2 = 0.0;
-    double time_elapsed = 0.0;
-    while (time_elapsed < target_seconds) {
-        t1 = MPI_Wtime();
-        compute_on_host();
-        t2 = MPI_Wtime();
-        time_elapsed += (t2-t1);
-    }
-}
 
 main(int argc, char **argv) {
 
@@ -78,7 +27,6 @@ main(int argc, char **argv) {
 	}
 
 	MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
-        #define DATA_SIZE 10000
 	buffer = (int*)malloc(DATA_SIZE*sizeof(int));
 
 	init_arrays();
@@ -93,20 +41,32 @@ main(int argc, char **argv) {
 
 	if(my_rank == 1) {
 	//Send
+#if WRITE_OTF2_TRACE
 	SCOREP_USER_REGION_BY_NAME_BEGIN("TRACER_WallTime_WAIT", SCOREP_USER_REGION_TYPE_COMMON);
+#endif
                 compute(WAIT_TIME);
+#if WRITE_OTF2_TRACE
         SCOREP_USER_REGION_BY_NAME_END("TRACER_WallTime_WAIT");
+#endif
 		MPI_Isend(buffer, DATA_SIZE, MPI_INT, 0, 123, MPI_COMM_WORLD, &req);
+#if WRITE_OTF2_TRACE
 	SCOREP_USER_REGION_BY_NAME_BEGIN("TRACER_WallTime_COMPUTE", SCOREP_USER_REGION_TYPE_COMMON);
+#endif
 		compute(COMPUTE_TIME);
+#if WRITE_OTF2_TRACE
         SCOREP_USER_REGION_BY_NAME_END("TRACER_WallTime_COMPUTE");
+#endif
 		MPI_Wait(&req, &stat);
 	} else if(my_rank == 0) {
 	//Recv
 		MPI_Irecv(buffer, DATA_SIZE, MPI_INT, 1, 123, MPI_COMM_WORLD, &req2);
+#if WRITE_OTF2_TRACE
 	SCOREP_USER_REGION_BY_NAME_BEGIN("TRACER_WallTime_COMPUTE", SCOREP_USER_REGION_TYPE_COMMON);
+#endif
                 compute(COMPUTE_TIME);
+#if WRITE_OTF2_TRACE
         SCOREP_USER_REGION_BY_NAME_END("TRACER_WallTime_COMPUTE");
+#endif
                 MPI_Wait(&req2, &stat2);
 	}
 
