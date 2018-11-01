@@ -42,7 +42,7 @@ main(int argc, char **argv) {
 	if(my_rank == 1) {
 	//Send
 		MPI_Isend(buffer, DATA_SIZE, MPI_INT, 0, 123, MPI_COMM_WORLD, &req);
-		compute(COMPUTE_TIME);
+		compute(3*COMPUTE_TIME);
 		MPI_Wait(&req, &stat);
 	} else if(my_rank == 0) {
 	//Recv

@@ -52,7 +52,7 @@ main(int argc, char **argv) {
 #if WRITE_OTF2_TRACE
 	SCOREP_USER_REGION_BY_NAME_BEGIN("TRACER_WallTime_COMPUTE", SCOREP_USER_REGION_TYPE_COMMON);
 #endif
-		compute(COMPUTE_TIME);
+		compute(2*COMPUTE_TIME);
 #if WRITE_OTF2_TRACE
         SCOREP_USER_REGION_BY_NAME_END("TRACER_WallTime_COMPUTE");
 #endif
@@ -63,7 +63,7 @@ main(int argc, char **argv) {
 #if WRITE_OTF2_TRACE
 	SCOREP_USER_REGION_BY_NAME_BEGIN("TRACER_WallTime_COMPUTE", SCOREP_USER_REGION_TYPE_COMMON);
 #endif
-                compute(COMPUTE_TIME);
+                compute(2*COMPUTE_TIME);
 #if WRITE_OTF2_TRACE
         SCOREP_USER_REGION_BY_NAME_END("TRACER_WallTime_COMPUTE");
 #endif

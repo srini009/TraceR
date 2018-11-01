@@ -42,13 +42,13 @@ main(int argc, char **argv) {
 	if(my_rank == 1) {
 	//Send
 		MPI_Isend(buffer, DATA_SIZE, MPI_INT, 0, 123, MPI_COMM_WORLD, &req);
-		compute(COMPUTE_TIME);
+		compute(2*COMPUTE_TIME);
 		MPI_Wait(&req, &stat);
 	} else if(my_rank == 0) {
 	//Recv
                 compute(WAIT_TIME);
 		MPI_Irecv(buffer, DATA_SIZE, MPI_INT, 1, 123, MPI_COMM_WORLD, &req2);
-                compute(COMPUTE_TIME);
+                compute(2*COMPUTE_TIME);
                 MPI_Wait(&req2, &stat2);
 	} else if(my_rank == 0) {
 	}
