@@ -575,7 +575,7 @@ static void proc_init(
     ns->my_pe->number_of_messages_received = new int64_t[jobs[ns->my_job].numRanks];
 
     for(int i = 0; i < jobs[ns->my_job].numRanks; i++) {
-      ns->my_pe->rdma_protocol[i] = RDMA_READ; //Set as default
+      ns->my_pe->rdma_protocol[i] = RDMA_WRITE; //Set as default
       ns->my_pe->avg_compute_time_sender[i] = ns->my_pe->curr_compute_time_sender[i] = ns->my_pe->avg_compute_time_receiver[i] = ns->my_pe->curr_compute_time_receiver[i] = ns->my_pe->effective_time_diff[i] = ns->my_pe->curr_effective_time_diff[i] = ns->my_pe->avg_data_message_size_sent[i] = ns->my_pe->avg_data_message_size_received[i] = ns->my_pe->avg_compute_time_opposite_receiver[i] = ns->my_pe->avg_effective_time_opposite_receiver[i] = 0.0;
       ns->my_pe->number_of_messages_sent[i] = 0;
       ns->my_pe->number_of_messages_received[i] = 0;
@@ -696,10 +696,18 @@ static void perform_rdma_tuning(
    //ns->my_pe->avg_compute_time_opposite_receiver,
    //ns->my_pe->avg_effective_time_opposite_receiver,
 
-   /*Detect CASE 1 of microbenchmarks*/
-     if((ns->my_pe->avg_effective_time_opposite_receiver[i] >= ns->my_pe->avg_compute_time_opposite_receiver[i]) && (copy_per_byte*ns->my_pe->avg_data_message_size_sent[i] < ns->my_pe->avg_compute_time_sender[i])) {
-       fprintf(stderr, "CASE 1: Optimal protocol between sender %d and receiver %d is RDMA_READ with eff. time %lf, recv.time %lf, and send. time %lf\n", ns->my_pe_num, i, ns->my_pe->avg_effective_time_opposite_receiver[i], ns->my_pe->avg_compute_time_opposite_receiver[i], ns->my_pe->avg_compute_time_sender[i]);
-     }    
+     if(i != ns->my_pe_num) {
+       /*Boil down communication statistics between the processes to one of the 6 microbenchmark cases*/
+       /* CASE1 */
+       if((ns->my_pe->avg_effective_time_opposite_receiver[i] > 0) &&
+          (ns->my_pe->avg_compute_time_opposite_receiver[i] < ns->my_pe->avg_effective_time_opposite_receiver[i])) {
+       	  fprintf(stderr, "CASE 1 for PE: %d with values: %f, %f, %f\n", ns->my_pe_num, ns->my_pe->avg_compute_time_sender[i], ns->my_pe->avg_compute_time_opposite_receiver[i], ns->my_pe->avg_effective_time_opposite_receiver[i]);
+       } /* CASE2 */
+       else if ((ns->my_pe->avg_effective_time_opposite_receiver[i] < 0) &&
+                (ns->my_pe->avg_compute_time_sender[i] < fabs(ns->my_pe->avg_effective_time_opposite_receiver[i]))) {
+       	  fprintf(stderr, "CASE 2 for PE: %d with values: %f, %f, %f\n", ns->my_pe_num, ns->my_pe->avg_compute_time_sender[i], ns->my_pe->avg_compute_time_opposite_receiver[i], ns->my_pe->avg_effective_time_opposite_receiver[i]);
+       }
+     }
    }
 }
 
