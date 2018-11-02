@@ -707,12 +707,12 @@ static void perform_rdma_tuning(
                 (ns->my_pe->avg_compute_time_sender[i] < fabs(ns->my_pe->avg_effective_time_opposite_receiver[i]))) {
        	  fprintf(stderr, "CASE 2 for PE: %d with values: %f, %f, %f\n", ns->my_pe_num, ns->my_pe->avg_compute_time_sender[i], ns->my_pe->avg_compute_time_opposite_receiver[i], ns->my_pe->avg_effective_time_opposite_receiver[i]);
        } /* CASE3 */
-       else if ((ns->my_pe->avg_effective_time_opposite_receiver[i] < 0) &&
-                (ns->my_pe->avg_compute_time_sender[i] > fabs(ns->my_pe->avg_effective_time_opposite_receiver[i])) &&
-                (ns->my_pe->avg_compute_time_sender[i] < (fabs(ns->my_pe->avg_effective_time_opposite_receiver[i]) + ns->my_pe->avg_compute_time_opposite_receiver[i]))) {
+       else if ((ns->my_pe->avg_effective_time_opposite_receiver[i] > 0) &&
+                (ns->my_pe->avg_compute_time_opposite_receiver[i] < ns->my_pe->avg_effective_time_opposite_receiver[i]) &&
+                ((ns->my_pe->avg_compute_time_sender[i] + ns->my_pe->avg_effective_time_opposite_receiver[i]) > ns->my_pe->avg_compute_time_opposite_receiver[i])) {
        	  fprintf(stderr, "CASE 3 for PE: %d with values: %f, %f, %f\n", ns->my_pe_num, ns->my_pe->avg_compute_time_sender[i], ns->my_pe->avg_compute_time_opposite_receiver[i], ns->my_pe->avg_effective_time_opposite_receiver[i]);
        } /* CASE4 */
-       else if ((ns->my_pe->avg_effective_time_opposite_receiver[i] > 0) &&
+       else if ((ns->my_pe->avg_effective_time_opposite_receiver[i] < 0) &&
                 (ns->my_pe->avg_compute_time_sender[i] > fabs(ns->my_pe->avg_effective_time_opposite_receiver[i])) &&
                 (ns->my_pe->avg_compute_time_sender[i] < (fabs(ns->my_pe->avg_effective_time_opposite_receiver[i]) + ns->my_pe->avg_compute_time_opposite_receiver[i]))) {
        	  fprintf(stderr, "CASE 4 for PE: %d with values: %f, %f, %f\n", ns->my_pe_num, ns->my_pe->avg_compute_time_sender[i], ns->my_pe->avg_compute_time_opposite_receiver[i], ns->my_pe->avg_effective_time_opposite_receiver[i]);
