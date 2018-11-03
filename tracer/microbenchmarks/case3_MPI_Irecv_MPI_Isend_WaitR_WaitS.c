@@ -41,32 +41,14 @@ main(int argc, char **argv) {
 
 	if(my_rank == 1) {
 	//Send
-#if WRITE_OTF2_TRACE
-	SCOREP_USER_REGION_BY_NAME_BEGIN("TRACER_WallTime_WAIT", SCOREP_USER_REGION_TYPE_COMMON);
-#endif
                 compute(WAIT_TIME);
-#if WRITE_OTF2_TRACE
-        SCOREP_USER_REGION_BY_NAME_END("TRACER_WallTime_WAIT");
-#endif
 		MPI_Isend(buffer, DATA_SIZE, MPI_INT, 0, 123, MPI_COMM_WORLD, &req);
-#if WRITE_OTF2_TRACE
-	SCOREP_USER_REGION_BY_NAME_BEGIN("TRACER_WallTime_COMPUTE", SCOREP_USER_REGION_TYPE_COMMON);
-#endif
 		compute(2*COMPUTE_TIME);
-#if WRITE_OTF2_TRACE
-        SCOREP_USER_REGION_BY_NAME_END("TRACER_WallTime_COMPUTE");
-#endif
 		MPI_Wait(&req, &stat);
 	} else if(my_rank == 0) {
 	//Recv
 		MPI_Irecv(buffer, DATA_SIZE, MPI_INT, 1, 123, MPI_COMM_WORLD, &req2);
-#if WRITE_OTF2_TRACE
-	SCOREP_USER_REGION_BY_NAME_BEGIN("TRACER_WallTime_COMPUTE", SCOREP_USER_REGION_TYPE_COMMON);
-#endif
                 compute(2*COMPUTE_TIME);
-#if WRITE_OTF2_TRACE
-        SCOREP_USER_REGION_BY_NAME_END("TRACER_WallTime_COMPUTE");
-#endif
                 MPI_Wait(&req2, &stat2);
 	}
 

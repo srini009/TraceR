@@ -48,7 +48,7 @@ main(int argc, char **argv) {
 		MPI_Wait(&req, &stat);
 	} else if(my_rank == 0) {
 	//Recv
-                compute(WAIT_TIME);
+                compute(2*WAIT_TIME);
 		MPI_Irecv(buffer, DATA_SIZE, MPI_INT, 1, 123, MPI_COMM_WORLD, &req2);
                 compute(COMPUTE_TIME);
                 MPI_Wait(&req2, &stat2);
