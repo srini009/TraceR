@@ -586,6 +586,25 @@ static void proc_init(
       ns->my_pe->sendSeq[i] = ns->my_pe->recvSeq[i] = 0;
     }
 
+    if(tuning_enabled) {
+      char filename[100];
+      sprintf(filename, "Protocol_%d", ns->my_pe_num);
+      FILE * fp = fopen(filename, "r");
+      int protocol_, receiver_;
+      ssize_t read;
+      char * line = NULL;
+      size_t len = 0;
+      while ((read = getline(&line, &len, fp)) != -1) {
+         sscanf(line,"%d %d", &receiver_, &protocol_);
+         ns->my_pe->rdma_protocol[receiver_] = protocol_; //SET RDMA protocol if tuning mode is enabled
+      }
+
+      fclose(fp);
+      remove(filename);
+    }
+      
+ 
+
     e = codes_event_new(lp->gid, kickoff_time, lp);
     m =  (proc_msg*)tw_event_data(e);
     m->proc_event_type = KICKOFF;
@@ -750,6 +769,7 @@ static void perform_rdma_tuning(
           fprintf(fp, "%d %d\n", i, 0); //RDMA_WRITE
      }
    }
+   fclose(fp);
 }
 
 static void proc_rev_event(
