@@ -53,6 +53,7 @@ typedef struct proc_msg proc_msg;
 typedef struct proc_state proc_state;
 
 unsigned int print_frequency = 5000;
+unsigned int tuning_enabled = 0;
 
 #define TRACER_A2A_ALG_CUTOFF 512
 #define TRACER_ALLGATHER_ALG_CUTOFF 163840
@@ -169,10 +170,13 @@ int main(int argc, char **argv)
     }
 
     strncpy(tracer_input, argv[2], strlen(argv[2]) + 1);
+    if(argc > 3);
+        tuning_enabled = atoi(argv[3]);
 
     if(!rank) {
         printf("Config file is %s\n", argv[1]);
         printf("Trace input file is %s\n", tracer_input);
+        printf("Tuning mode: %d\n", tuning_enabled);
     }
 
     configuration_load(argv[1], MPI_COMM_WORLD, &config);
@@ -690,6 +694,11 @@ static void proc_event(
 static void perform_rdma_tuning(
     proc_state * ns,
     tw_lp * lp) {
+    
+   char filename[100];
+   sprintf(filename, "Protocol_%d", ns->my_pe_num);
+   FILE * fp = fopen(filename, "w");
+
    for(int i = 0; i < jobs[ns->my_job].numRanks; i++) {
    //ns->my_pe->avg_compute_time_sender[i], 
    //ns->my_pe->avg_data_message_size_sent,
@@ -701,35 +710,44 @@ static void perform_rdma_tuning(
        /* CASE1 */
        if((ns->my_pe->avg_effective_time_opposite_receiver[i] > 0) &&
           (ns->my_pe->avg_compute_time_opposite_receiver[i] < ns->my_pe->avg_effective_time_opposite_receiver[i])) {
-       	  fprintf(stderr, "CASE 1 for PE: %d with values: %f, %f, %f\n", ns->my_pe_num, ns->my_pe->avg_compute_time_sender[i], ns->my_pe->avg_compute_time_opposite_receiver[i], ns->my_pe->avg_effective_time_opposite_receiver[i]);
+       	  fprintf(stderr, "CASE 1 for PE: %d with PE: %d with values: %f, %f, %f\n", ns->my_pe_num, i, ns->my_pe->avg_compute_time_sender[i], ns->my_pe->avg_compute_time_opposite_receiver[i], ns->my_pe->avg_effective_time_opposite_receiver[i]);
+          fprintf(fp, "%d %d\n", i, 1); //RDMA_READ
        } /* CASE2 */
        else if ((ns->my_pe->avg_effective_time_opposite_receiver[i] < 0) &&
                 (ns->my_pe->avg_compute_time_sender[i] < fabs(ns->my_pe->avg_effective_time_opposite_receiver[i]))) {
-       	  fprintf(stderr, "CASE 2 for PE: %d with values: %f, %f, %f\n", ns->my_pe_num, ns->my_pe->avg_compute_time_sender[i], ns->my_pe->avg_compute_time_opposite_receiver[i], ns->my_pe->avg_effective_time_opposite_receiver[i]);
+       	  fprintf(stderr, "CASE 2 for PE: %d with PE: %d with values: %f, %f, %f\n", ns->my_pe_num, i, ns->my_pe->avg_compute_time_sender[i], ns->my_pe->avg_compute_time_opposite_receiver[i], ns->my_pe->avg_effective_time_opposite_receiver[i]);
+          fprintf(fp, "%d %d\n", i, 0); //RDMA_WRITE
        } /* CASE3 */
        else if ((ns->my_pe->avg_effective_time_opposite_receiver[i] > 0) &&
                 (ns->my_pe->avg_compute_time_opposite_receiver[i] > ns->my_pe->avg_effective_time_opposite_receiver[i]) &&
                 ((ns->my_pe->avg_compute_time_sender[i] + ns->my_pe->avg_effective_time_opposite_receiver[i]) > ns->my_pe->avg_compute_time_opposite_receiver[i])) {
-       	  fprintf(stderr, "CASE 3 for PE: %d with values: %f, %f, %f\n", ns->my_pe_num, ns->my_pe->avg_compute_time_sender[i], ns->my_pe->avg_compute_time_opposite_receiver[i], ns->my_pe->avg_effective_time_opposite_receiver[i]);
+       	  fprintf(stderr, "CASE 3 for PE: %d with PE: %d with values: %f, %f, %f\n", ns->my_pe_num, i, ns->my_pe->avg_compute_time_sender[i], ns->my_pe->avg_compute_time_opposite_receiver[i], ns->my_pe->avg_effective_time_opposite_receiver[i]);
+          fprintf(fp, "%d %d\n", i, 1); //RDMA_READ
        } /* CASE4 */
        else if ((ns->my_pe->avg_effective_time_opposite_receiver[i] < 0) &&
                 (ns->my_pe->avg_compute_time_sender[i] > fabs(ns->my_pe->avg_effective_time_opposite_receiver[i])) &&
                 (ns->my_pe->avg_compute_time_sender[i] < (fabs(ns->my_pe->avg_effective_time_opposite_receiver[i]) + ns->my_pe->avg_compute_time_opposite_receiver[i]))) {
-       	  fprintf(stderr, "CASE 4 for PE: %d with values: %f, %f, %f\n", ns->my_pe_num, ns->my_pe->avg_compute_time_sender[i], ns->my_pe->avg_compute_time_opposite_receiver[i], ns->my_pe->avg_effective_time_opposite_receiver[i]);
+       	  fprintf(stderr, "CASE 4 for PE: %d with PE: %d with values: %f, %f, %f\n", ns->my_pe_num, i, ns->my_pe->avg_compute_time_sender[i], ns->my_pe->avg_compute_time_opposite_receiver[i], ns->my_pe->avg_effective_time_opposite_receiver[i]);
+          fprintf(fp, "%d %d\n", i, 0); //RDMA_WRITE
        } /* CASE5*/
        else if ((ns->my_pe->avg_effective_time_opposite_receiver[i] > 0) &&
                 (ns->my_pe->avg_compute_time_opposite_receiver[i] > ns->my_pe->avg_effective_time_opposite_receiver[i]) &&
                 ((ns->my_pe->avg_compute_time_sender[i] + ns->my_pe->avg_effective_time_opposite_receiver[i]) < ns->my_pe->avg_compute_time_opposite_receiver[i])) {
-       	  fprintf(stderr, "CASE 5 for PE: %d with values: %f, %f, %f\n", ns->my_pe_num, ns->my_pe->avg_compute_time_sender[i], ns->my_pe->avg_compute_time_opposite_receiver[i], ns->my_pe->avg_effective_time_opposite_receiver[i]);
+       	  fprintf(stderr, "CASE 5 for PE: %d with PE: %d with values: %f, %f, %f\n", ns->my_pe_num, i, ns->my_pe->avg_compute_time_sender[i], ns->my_pe->avg_compute_time_opposite_receiver[i], ns->my_pe->avg_effective_time_opposite_receiver[i]);
+          fprintf(fp, "%d %d\n", i, 0); //RDMA_WRITE
        } /* CASE6*/
        else if ((ns->my_pe->avg_effective_time_opposite_receiver[i] < 0) &&
                 (ns->my_pe->avg_compute_time_sender[i] > fabs(ns->my_pe->avg_effective_time_opposite_receiver[i])) &&
                 (ns->my_pe->avg_compute_time_sender[i] > (fabs(ns->my_pe->avg_effective_time_opposite_receiver[i]) + ns->my_pe->avg_compute_time_opposite_receiver[i]))) {
-       	  fprintf(stderr, "CASE 6 for PE: %d with values: %f, %f, %f\n", ns->my_pe_num, ns->my_pe->avg_compute_time_sender[i], ns->my_pe->avg_compute_time_opposite_receiver[i], ns->my_pe->avg_effective_time_opposite_receiver[i]);
+       	  fprintf(stderr, "CASE 6 for PE: %d with PE: %d with values: %f, %f, %f\n", ns->my_pe_num, i, ns->my_pe->avg_compute_time_sender[i], ns->my_pe->avg_compute_time_opposite_receiver[i], ns->my_pe->avg_effective_time_opposite_receiver[i]);
+          fprintf(fp, "%d %d\n", i, 1); //RDMA_READ
        }
        else {
           fprintf(stderr, "CASE DEFAULT: EDGE CASE DETECTED for PE: %d with values: %f, %f, %f\n", ns->my_pe_num, ns->my_pe->avg_compute_time_sender[i], ns->my_pe->avg_compute_time_opposite_receiver[i], ns->my_pe->avg_effective_time_opposite_receiver[i]);
+          fprintf(fp, "%d %d\n", i, 0); //RDMA_WRITE
        }
+     } else {
+          fprintf(fp, "%d %d\n", i, 0); //RDMA_WRITE
      }
    }
 }
