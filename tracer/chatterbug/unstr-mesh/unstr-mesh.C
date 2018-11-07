@@ -16,6 +16,7 @@
 #include "mpi.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 using namespace std;
 #include <vector>
 
@@ -130,22 +131,33 @@ int main(int argc, char **argv)
 #if WRITE_OTF2_TRACE
     // Marks compute region before messaging
     SCOREP_USER_REGION_BY_NAME_BEGIN("TRACER_umesh_pre_msg", SCOREP_USER_REGION_TYPE_COMMON);
+    usleep(3000);
     SCOREP_USER_REGION_BY_NAME_END("TRACER_umesh_pre_msg");
+#endif
+
+    for(int j = 0; j < my_degree; j++) {
+      MPI_Isend(&sendbuf[j * msg_size], msg_size, MPI_CHAR, neighbors[j], i,
+        MPI_COMM_WORLD, &sreq[j]);
+    }
+#if WRITE_OTF2_TRACE
+    // Marks compute region for computation-communication overlap
+    SCOREP_USER_REGION_BY_NAME_BEGIN("TRACER_umesh_overlap1", SCOREP_USER_REGION_TYPE_COMMON);
+    usleep(300000);
+    SCOREP_USER_REGION_BY_NAME_END("TRACER_umesh_overlap1");
 #endif
 
     for(int j = 0; j < numNeighbors; j++) {
       MPI_Irecv(&recvbuf[j * msg_size], msg_size, MPI_CHAR, MPI_ANY_SOURCE, i,
         MPI_COMM_WORLD, &rreq[j]);
     }
-    for(int j = 0; j < my_degree; j++) {
-      MPI_Isend(&sendbuf[j * msg_size], msg_size, MPI_CHAR, neighbors[j], i,
-        MPI_COMM_WORLD, &sreq[j]);
-    }
 
 #if WRITE_OTF2_TRACE
     // Marks compute region for computation-communication overlap
-    SCOREP_USER_REGION_BY_NAME_BEGIN("TRACER_umesh_overlap", SCOREP_USER_REGION_TYPE_COMMON);
-    SCOREP_USER_REGION_BY_NAME_END("TRACER_umesh_overlap");
+    SCOREP_USER_REGION_BY_NAME_BEGIN("TRACER_umesh_overlap2", SCOREP_USER_REGION_TYPE_COMMON);
+    //usleep(300000);
+    SCOREP_USER_REGION_BY_NAME_END("TRACER_umesh_overlap2");
+#else
+    //usleep(300000);
 #endif
 
     MPI_Waitall(my_degree, &sreq[0], MPI_STATUSES_IGNORE);
@@ -154,6 +166,7 @@ int main(int argc, char **argv)
 #if WRITE_OTF2_TRACE
     // Marks compute region after messaging
     SCOREP_USER_REGION_BY_NAME_BEGIN("TRACER_umesh_post_msg", SCOREP_USER_REGION_TYPE_COMMON);
+    usleep(3000);
     SCOREP_USER_REGION_BY_NAME_END("TRACER_umesh_post_msg");
 #endif
   }
