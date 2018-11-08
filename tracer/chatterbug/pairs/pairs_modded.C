@@ -16,6 +16,8 @@
 #include "mpi.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
+
 #define RAND_SEED 1331
 
 #if WRITE_OTF2_TRACE
@@ -59,7 +61,7 @@ int main(int argc, char **argv)
 
   double startTime, stopTime;
   MPI_Status status;
-  MPI_Request requests[2];
+  MPI_Request request;
   char *sendbuf, *recvbuf;
   int partner;
 
@@ -125,8 +127,12 @@ int main(int argc, char **argv)
     SCOREP_USER_REGION_BY_NAME_END("TRACER_pairs_pre_msg");
 #endif
 
-    MPI_Irecv(recvbuf, msg_size, MPI_CHAR, partner, 0, MPI_COMM_WORLD, &requests[0]);
-    MPI_Isend(sendbuf, msg_size, MPI_CHAR, partner, 0, MPI_COMM_WORLD, &requests[1]);
+ if(myrank >= numranks/2) {
+      MPI_Irecv(recvbuf, msg_size, MPI_CHAR, partner, 0, MPI_COMM_WORLD, &request);
+ } else {
+      usleep(3000);
+    MPI_Isend(sendbuf, msg_size, MPI_CHAR, partner, 0, MPI_COMM_WORLD, &request);
+ }
 
 #if WRITE_OTF2_TRACE
     // Marks compute region for computation-communication overlap
@@ -134,7 +140,11 @@ int main(int argc, char **argv)
     SCOREP_USER_REGION_BY_NAME_END("TRACER_pairs_overlap");
 #endif
 
-    MPI_Waitall(2, requests, MPI_STATUSES_IGNORE);
+   
+   usleep(1000);
+   // MPI_Waitall(2, requests, MPI_STATUSES_IGNORE);
+   MPI_Wait(&request, &status);
+  
 
 #if WRITE_OTF2_TRACE
     // Marks compute region after messaging
@@ -145,15 +155,15 @@ int main(int argc, char **argv)
 
 #if WRITE_OTF2_TRACE
   // Marks the end of code region to be repeated in simulation
-  SCOREP_USER_REGION_BY_NAME_END("TRACER_Loop");
+  if(!myrank)
+    SCOREP_USER_REGION_BY_NAME_END("TRACER_WallTime_pairs");
 #endif
   MPI_Barrier(MPI_COMM_WORLD);
   stopTime = MPI_Wtime();
 
 #if WRITE_OTF2_TRACE
   // Marks when to print a timer in simulation
-  if(!myrank)
-    SCOREP_USER_REGION_BY_NAME_END("TRACER_WallTime_pairs");
+  SCOREP_USER_REGION_BY_NAME_END("TRACER_Loop");
   SCOREP_RECORDING_OFF();
 #endif
   

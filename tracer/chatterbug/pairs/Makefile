@@ -17,8 +17,8 @@ include ../Makefile.common
 
 all: pairs$(SUFFIX)
 
-pairs$(SUFFIX): pairs.C
+pairs$(SUFFIX): pairs_modded.C
 	$(CXX) $(CXXFLAGS) -o $@ $<
 
 clean:
-	rm -f pairs$(SUFFIX)
+	rm -rf pairs$(SUFFIX) Protocol* tracer-out*
