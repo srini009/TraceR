@@ -1,0 +1,16 @@
+=== HOW TO RUN ===
+
+In order to compile and build the example, change:
+1. In the Makefile, change the $ROOT variable appropriately and run make.
+2. In the demo.sh file, change the $MPI_ROOT and $TAU_ROOT variables.
+3. Run on either 8 nodes or 16 nodes for ri2 (best performance on these node counts, other node counts not supported in the script, although you can modify it easily). Larger node counts are preferred.
+4. Run ./demo.sh
+5. Three runs are thus executed:
+   a. Default
+   b. Eager threshold raised (both inter and intra-node)
+   c. Eager threshold raised + TAU autotuning to free unused VBUFS
+6. Each run outputs a run-<experiment_type>-* file
+7. This file has the "percentage of communication-computation overlap" achieved during the run. Higher the value, the better.
+8. We also output TAU .ppk files - one can look at the context event window (MEAN across all processes). The AVERAGE mv2_total_vbuf_memory (kB) tells us what is the average value of this PVAR across process, across all the samples collected. Lower this number, the better.
+9. What one can note is that the run (b) increases this AVERAGE mv2_total_vbuf_memory, while run (c) (Aututuning plugin) reduces this value by freeing up unused VBUF memory without affecting performance (communication-computation overlap). The mv2_total_vbuf_memory for run (c) is in between (a) and (b). The level of memory reduction is strictly application and communication-pattern dependent. The message size in 3DStencil has been tweaked to find a sweet-spot that shows some demonstrable reduction.
+10. Some sample results can be found in sample_results/
