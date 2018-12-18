@@ -138,10 +138,12 @@ int main(int argc, char **argv)
       MPI_Irecv(&recvbuf[j * msg_size], msg_size, MPI_CHAR, MPI_ANY_SOURCE, i,
         MPI_COMM_WORLD, &rreq[j]);
     }
+
     for(int j = 0; j < my_degree; j++) {
       MPI_Isend(&sendbuf[j * msg_size], msg_size, MPI_CHAR, neighbors[j], i,
         MPI_COMM_WORLD, &sreq[j]);
     }
+
 #if WRITE_OTF2_TRACE
     // Marks compute region for computation-communication overlap
     SCOREP_USER_REGION_BY_NAME_BEGIN("TRACER_umesh_overlap", SCOREP_USER_REGION_TYPE_COMMON);

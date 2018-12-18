@@ -2,6 +2,10 @@
 #include <stdlib.h>
 #include <mpi.h>
 
+#if WRITE_OTF2_TRACE
+#include <scorep/SCOREP_User.h>
+#endif
+
 #define max(a,b) ((a)>(b)?(a):(b))
 
 #ifndef FIELD_WIDTH
@@ -65,10 +69,8 @@ dummy_compute(double target_seconds)
     }
 }
 
-print_preamble_nbc (int rank)
+void print_preamble_nbc (int rank)
 {
-    if (rank) return;
-
     fprintf(stdout, "# Overall = Init + Compute + MPI_Wait\n\n");
     fprintf(stdout, "%-*s", 10, "# Size");
     fprintf(stdout, "%*s", FIELD_WIDTH, "Overall(us)");
@@ -294,8 +296,18 @@ int sendrecv(MPI_Comm comm3d, int msg_size, int msg_count, int iter_count,
 
     init_arrays();
 
+#if WRITE_OTF2_TRACE
+  SCOREP_RECORDING_ON();
+  // Marks the beginning of code region to be repeated in simulation
+  SCOREP_USER_REGION_BY_NAME_BEGIN("TRACER_Loop", SCOREP_USER_REGION_TYPE_COMMON);
+#endif
+
     /*send and receive messages*/  
     for (i = 0; i < (iter_count + iter_warmup); i++) {
+#if WRITE_OTF2_TRACE
+  // Marks the beginning of code region to be repeated in simulation
+  SCOREP_USER_REGION_BY_NAME_BEGIN("TRACER_Iteration", SCOREP_USER_REGION_TYPE_COMMON);
+#endif
         total_time = MPI_Wtime();
         rreq_idx = 0; 
         sreq_idx = 0;
@@ -387,7 +399,12 @@ int sendrecv(MPI_Comm comm3d, int msg_size, int msg_count, int iter_count,
         init_time = MPI_Wtime() - init_time;
 
         comp_time = MPI_Wtime();
+#if WRITE_OTF2_TRACE
+    // Marks compute region for computation-communication overlap
+    SCOREP_USER_REGION_BY_NAME_BEGIN("TRACER_stencil3d_overlap", SCOREP_USER_REGION_TYPE_COMMON);
         dummy_compute(latency_in_secs);
+    SCOREP_USER_REGION_BY_NAME_END("TRACER_stencil3d_overlap");
+#endif
         comp_time = MPI_Wtime() - comp_time;
 
         wait_time = MPI_Wtime();
@@ -404,7 +421,18 @@ int sendrecv(MPI_Comm comm3d, int msg_size, int msg_count, int iter_count,
         }
 
         MPI_Barrier(comm3d);
+
+#if WRITE_OTF2_TRACE
+  // Marks the end of code region to be repeated in simulation
+  SCOREP_USER_REGION_BY_NAME_END("TRACER_Iteration");
+#endif
     }
+
+#if WRITE_OTF2_TRACE
+  // Marks the end of code region to be repeated in simulation
+  SCOREP_USER_REGION_BY_NAME_END("TRACER_Loop");
+  SCOREP_RECORDING_OFF();
+#endif
 
     calculate_and_print_stats(MPI_COMM_WORLD, rank, msg_size, comm_size, iter_count,
                               total_total, latency,
@@ -461,6 +489,11 @@ int main (int c, char *v[])
     iter_count = atoi(v[4]);
 
     MPI_Init(&c, &v);
+
+#if WRITE_OTF2_TRACE
+  SCOREP_RECORDING_OFF();
+#endif
+
     MPI_Comm_size(MPI_COMM_WORLD, &comm_size); 
     
     if (comm_size != px*py*pz) {
@@ -478,19 +511,22 @@ int main (int c, char *v[])
     period[1] = 0;
     period[2] = 0;
     reorder = 1; 
-    
+
     MPI_Cart_create (MPI_COMM_WORLD, 3, dim, period, reorder, &comm3d);
     MPI_Cart_shift(comm3d, 0,  1,  &xrankL, &xrankR );
     MPI_Cart_shift(comm3d, 1,  1,  &yrankL, &yrankR );
     MPI_Cart_shift(comm3d, 2,  1,  &zrankL, &zrankR );
-    MPI_Comm_rank(comm3d, &rank);  
+    MPI_Comm_rank(comm3d, &rank);
 
     if (rank == 0) {
         fprintf(stdout, "PX: %d PY: %d PZ: %d msg_size: %d msg_count: %d iter_count: %d \n", 
                 px, py, pz, msg_size, msg_count, iter_count);
     }
 
-    print_preamble_nbc(rank);
+    if(!rank)
+        print_preamble_nbc(rank);
+
+    MPI_Barrier(MPI_COMM_WORLD);
 
     s = MPI_Wtime(); 
     //for (msg_size = 1; msg_size < 1<<20; msg_size=msg_size*2) {
@@ -499,7 +535,11 @@ int main (int c, char *v[])
         sendrecv(comm3d, msg_size, msg_count, iter_count, iter_warmup,
                 rank, comm_size, xrankL, xrankR, yrankL, yrankR, zrankL, zrankR);
     //}
-    print_preamble_nbc(rank);
+    
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    if(!rank)
+        print_preamble_nbc(rank);
 
     f = MPI_Wtime() - s;
     if(rank == 0) 

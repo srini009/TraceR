@@ -53,6 +53,12 @@ then
     export PY=7
     export PZ=2
     export iter_count=1000
+elif [ "$nprocs" == "32" ]
+then
+    export PX=4
+    export PY=4
+    export PZ=2
+    export iter_count=500
 elif [ "$nprocs" == "112" ]
 then
     export PX=4
