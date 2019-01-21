@@ -612,7 +612,7 @@ static void proc_init(
   fprintf(stderr, "RDMA_DEBUG: Kickoff time %lf\n", kickoff_time);
 
   fprintf(stderr, "RDMA_DEBUG: Total number of tasks for PE %d is : %d\n", ns->my_pe_num, ns->my_pe->tasksCount);
-   int count_r = 0, count_s = 0;
+   int count_r = 0, count_s = 0; int count_send = 0;
     for(int k=0; k < ns->my_pe->tasksCount; k++) {
       Task *t = &ns->my_pe->myTasks[k];
       if(t->event_id == TRACER_RECV_COMP_EVT) {
@@ -621,8 +621,11 @@ static void proc_init(
       if(t->event_id == TRACER_SEND_COMP_EVT) {
         count_s++;
       }
+      if(t->event_id == TRACER_SEND_EVT) {
+	    count_send++;
+	  }
     }
-  fprintf(stderr, "RDMA_DEBUG: Total number of TRACER_RECV_COMP_EVT and TRACER_SEND_COMP_EVT tasks for PE %d is : %d and %d\n", ns->my_pe_num, count_r, count_s);
+  fprintf(stderr, "RDMA_DEBUG: Total number of TRACER_RECV_COMP_EVT and TRACER_SEND_COMP_EVT, TRACER_SEND_EVT tasks for PE %d is : %d and %d and %d\n", ns->my_pe_num, count_r, count_s, count_send);
 
 #endif
     tw_event_send(e);
@@ -762,7 +765,7 @@ static void perform_rdma_tuning(
           fprintf(fp, "%d %d\n", i, 1); //RDMA_READ
        }
        else {
-          fprintf(stderr, "CASE DEFAULT: EDGE CASE DETECTED for PE: %d with values: %f, %f, %f\n", ns->my_pe_num, ns->my_pe->avg_compute_time_sender[i], ns->my_pe->avg_compute_time_opposite_receiver[i], ns->my_pe->avg_effective_time_opposite_receiver[i]);
+          // fprintf(stderr, "CASE DEFAULT: EDGE CASE DETECTED for PE: %d with values: %f, %f, %f\n", ns->my_pe_num, ns->my_pe->avg_compute_time_sender[i], ns->my_pe->avg_compute_time_opposite_receiver[i], ns->my_pe->avg_effective_time_opposite_receiver[i]);
           fprintf(fp, "%d %d\n", i, 0); //RDMA_WRITE
        }
      } else {
@@ -1537,7 +1540,7 @@ static void handle_recv_post_event(
   MsgKey key(m->msgId.pe, m->msgId.id, m->msgId.comm, m->msgId.seq);
   KeyType::iterator it = ns->my_pe->pendingRMsgs.find(key);
  
-  #ifdef TRACER_RDMA_DEBUG_NON_CRITICAL
+  #ifdef TRACER_RDMA_DEBUG
   fprintf(stderr, "RDMA_DEBUG: PE: %d Number of items in pendingRMsgs array: %d with key elements %d, %d, %d\n", ns->my_pe_num, it->second.size(), m->msgId.pe, m->msgId.id, m->msgId.seq);
   #endif
   assert(it->second.size() != 0); //Assert that we have indeed added the entry - just a safety check
@@ -1563,7 +1566,7 @@ static void handle_recv_post_event(
  * depending on whether or not the corresponding MPI_Wait is posted.
  * If RDMA_READ, immediately respond, "as if" the hardware is performing an RDMA_READ*/
     if(ns->my_pe->rdma_protocol[m->msgId.pe] == RDMA_WRITE) {
-      if(ns->my_pe->pendingReqs[t->req_id] != -1) { /*Has MPI_Wait been posted? */
+      if(ns->my_pe->pendingReqs[t->req_id] != -1 || t->event_id == TRACER_RECV_COMP_EVT || t->event_id == TRACER_SEND_EVT) { /*Has MPI_Wait been posted? */
         #ifdef TRACER_RDMA_DEBUG 
         fprintf(stderr, "RDMA_DEBUG, RDMA_WRITE: Task %d RECV_POST message received after MPI_Wait was posted\n", ns->my_pe_num);
         #endif
@@ -1576,6 +1579,7 @@ static void handle_recv_post_event(
       } 
 
       else { /* If not, store the message until the MPI_Wait is posted*/
+	    fprintf(stderr, "Event id is %d\n", t->event_id);
         #ifdef TRACER_RDMA_DEBUG 
         fprintf(stderr, "RDMA_DEBUG, RDMA_WRITE: Task %d RECV_POST message received before MPI_Wait was posted\n", ns->my_pe_num);
         #endif
