@@ -1579,7 +1579,6 @@ static void handle_recv_post_event(
       } 
 
       else { /* If not, store the message until the MPI_Wait is posted*/
-	    fprintf(stderr, "Event id is %d\n", t->event_id);
         #ifdef TRACER_RDMA_DEBUG 
         fprintf(stderr, "RDMA_DEBUG, RDMA_WRITE: Task %d RECV_POST message received before MPI_Wait was posted\n", ns->my_pe_num);
         #endif
