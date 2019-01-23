@@ -40,7 +40,7 @@ class MsgKey {
   bool operator< (const MsgKey &rhs) const {
     if(rank != rhs.rank) return rank < rhs.rank;
     else if(tag != rhs.tag) return tag < rhs.tag;
-    //else if(seq != rhs.seq) return seq < rhs.seq;
+    else if(seq != rhs.seq) return seq < rhs.seq;
     else return comm < rhs.comm;
     //else if(comm != rhs.comm) return comm < rhs.comm;
     //else return seq < rhs.seq;

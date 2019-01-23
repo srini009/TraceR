@@ -1566,7 +1566,7 @@ static void handle_recv_post_event(
  * depending on whether or not the corresponding MPI_Wait is posted.
  * If RDMA_READ, immediately respond, "as if" the hardware is performing an RDMA_READ*/
     if(ns->my_pe->rdma_protocol[m->msgId.pe] == RDMA_WRITE) {
-      if(ns->my_pe->pendingReqs[t->req_id] != -1 || t->event_id == TRACER_RECV_COMP_EVT) { /*Has MPI_Wait been posted? */
+      if(ns->my_pe->pendingReqs[t->req_id] != -1 || t->event_id == TRACER_RECV_COMP_EVT || t->event_id == TRACER_SEND_EVT || t->event_id == TRACER_SEND_COMP_EVT || t->event_id == TRACER_RECV_POST_EVT) { /*Inside MPI?*/
         #ifdef TRACER_RDMA_DEBUG 
         fprintf(stderr, "RDMA_DEBUG, RDMA_WRITE: Task %d RECV_POST message received after MPI_Wait was posted\n", ns->my_pe_num);
         #endif
@@ -1577,7 +1577,6 @@ static void handle_recv_post_event(
         assert(it->second.size() == 0);
         ns->my_pe->pendingRMsgs.erase(it);
       } 
-
       else { /* If not, store the message until the MPI_Wait is posted*/
         #ifdef TRACER_RDMA_DEBUG 
         fprintf(stderr, "RDMA_DEBUG, RDMA_WRITE: Task %d RECV_POST message received before MPI_Wait was posted\n", ns->my_pe_num);
@@ -1598,33 +1597,6 @@ static void handle_recv_post_event(
   }
   
 }
-
-static void respond_to_pending_recv_post_messages(proc_state * ns, tw_lp * lp)
-{
-  std::map<int, std::list< MsgKey > >::iterator it = ns->my_pe->pendingReceivedPostMsgs.begin();
-  proc_msg *m = NULL;
-  tw_bf *b = NULL;
-
-  while(it != ns->my_pe->pendingReceivedPostMsgs.end()) {
-    std::map<int, std::list < MsgKey > >::iterator it_recv_post = ns->my_pe->pendingReceivedPostMsgs.find(it->first);
-    if(it_recv_post != ns->my_pe->pendingReceivedPostMsgs.end()) {
-        KeyType::iterator it_rMsgs = ns->my_pe->pendingRMsgs.find(it_recv_post->second.front());
-        assert(it_rMsgs->second.size() != 0); //Assert that we have indeed added the entry!
-        Task *t_ = &ns->my_pe->myTasks[it_rMsgs->second.front()]; //This is the MPI_Isend task
-        delegate_send_msg(ns, lp, m, b, t_, ns->my_pe->pendingReqs[it->first], 0);
-
-        it_rMsgs->second.pop_front();
-        assert(it_rMsgs->second.size() == 0);
-        ns->my_pe->pendingRMsgs.erase(it_rMsgs);
-
-        it_recv_post->second.pop_front();
-        assert(it_recv_post->second.size() == 0);
-        ns->my_pe->pendingReceivedPostMsgs.erase(it_recv_post);
-    }
-	++it;
-  }
-}
-   
 
 /*Just store the message as a new entry in the list. 
  * What to do with this message is dealt with elsewhere*/
@@ -2000,7 +1972,6 @@ static tw_stime exec_task(
         fprintf(stderr, "RDMA_DEBUG: Task %d Expect to receive a data message\n", ns->my_pe_num);
          #endif
         ns->my_pe->pendingMsgs[key].push_back(task_id.taskid);
-        respond_to_pending_recv_post_messages(ns, lp);
         return 0;
       } else { /*Message is available. Take it!*/
   
